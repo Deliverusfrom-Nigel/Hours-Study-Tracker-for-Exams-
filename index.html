@@ -1,0 +1,2478 @@
+<title>Study Hours Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one column of cards — live timer first, then today, totals, manual entry, week, log, settings. */
+:root {
+  --bg: #f2f4f3;
+  --surface: #ffffff;
+  --ink: #17201f;
+  --muted: #5c6a68;
+  --line: #d6dedc;
+  --fp: #0c6b60;
+  --fp-soft: #d9eeea;
+  --pde: #5b3fa6;
+  --pde-soft: #e7e1f6;
+  --ml: #1d5fa8;
+  --ml-soft: #e0ebf8;
+  --cn: #a3245a;
+  --cn-soft: #f8e1eb;
+  --accent-ink: #ffffff;
+  --good: #1f7a3a;
+  --warn: #9a5b00;
+  --warn-soft: #faefdb;
+  --track: #e6ecea;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1514; --surface: #161e1d; --ink: #e3ebe9; --muted: #9aaba8; --line: #2b3735;
+    --fp: #5cc6b6; --fp-soft: #173833; --pde: #b39cf0; --pde-soft: #2a2242; --ml: #8cbcf2; --ml-soft: #172a40; --cn: #f08bb4; --cn-soft: #3a1a29; --accent-ink: #0d1312;
+    --good: #6fd08a; --warn: #e3a64e; --warn-soft: #36290f; --track: #22302e; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1514; --surface: #161e1d; --ink: #e3ebe9; --muted: #9aaba8; --line: #2b3735;
+  --fp: #5cc6b6; --fp-soft: #173833; --pde: #b39cf0; --pde-soft: #2a2242; --ml: #8cbcf2; --ml-soft: #172a40; --cn: #f08bb4; --cn-soft: #3a1a29; --accent-ink: #0d1312;
+  --good: #6fd08a; --warn: #e3a64e; --warn-soft: #36290f; --track: #22302e; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 720px; margin: 0 auto; padding: 28px 16px 64px; display: flex; flex-direction: column; gap: 16px; }
+header h1 { font-size: 26px; font-weight: 700; margin: 0; letter-spacing: -.01em; }
+header p { margin: 4px 0 0; color: var(--muted); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; min-width: 0; }
+.card h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 0 0 12px; }
+.status { font-size: 13.5px; padding: 8px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); }
+.status[hidden] { display: none; }
+.pasth { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 6px 0 -4px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.row.past .bar span { opacity: .7; }
+
+/* Timer */
+.timer { display: grid; gap: 14px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 3px; background: var(--bg); }
+.seg button { font: 600 14px var(--font-body); border: 0; border-radius: 999px; padding: 7px 16px; cursor: pointer; background: transparent; color: var(--muted); }
+.seg button[aria-pressed="true"].fp { background: var(--fp); color: var(--accent-ink); }
+.seg button[aria-pressed="true"].pde { background: var(--pde); color: var(--accent-ink); }
+.seg button[aria-pressed="true"].ml { background: var(--ml); color: var(--accent-ink); }
+.seg button[aria-pressed="true"].cn { background: var(--cn); color: var(--accent-ink); }
+.seg { flex-wrap: wrap; }
+.seg button:disabled { cursor: default; }
+.clock { font: 600 clamp(44px, 12vw, 64px)/1 var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.clock-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; }
+.runinfo { color: var(--muted); font-size: 14px; min-height: 21px; }
+.big { font: 700 16px var(--font-body); border: 0; border-radius: 10px; padding: 14px 28px; cursor: pointer; color: var(--accent-ink); background: var(--fp); min-width: 140px; }
+.big.pde { background: var(--pde); } .big.ml { background: var(--ml); } .big.cn { background: var(--cn); }
+.big.stop { background: var(--ink); color: var(--surface); }
+.big:disabled { opacity: .5; cursor: default; }
+.big[hidden] { display: none; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--good); animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+
+/* Bars */
+.row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: baseline; }
+.row + .row { margin-top: 14px; }
+.lbl { font-weight: 600; }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 14px; color: var(--muted); }
+.num b { color: var(--ink); font-weight: 600; }
+.bar { grid-column: 1 / -1; height: 12px; background: var(--track); border-radius: 999px; overflow: hidden; display: flex; }
+.bar span { display: block; height: 100%; }
+.bar .fp { background: var(--fp); } .bar .ml { background: var(--ml); } .bar .cn { background: var(--cn); }
+.bar .pde { background: var(--pde); }
+.sub { grid-column: 1 / -1; font-size: 13px; color: var(--muted); }
+.legend { display: flex; gap: 14px; font-size: 13px; color: var(--muted); margin-top: 10px; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.sw.fp { background: var(--fp); } .sw.pde { background: var(--pde); } .sw.ml { background: var(--ml); } .sw.cn { background: var(--cn); }
+.breaks .legend { margin-top: 6px; }
+
+/* Week chart */
+.week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; align-items: end; height: 150px; }
+.col { display: flex; flex-direction: column; align-items: stretch; height: 100%; justify-content: flex-end; gap: 4px; min-width: 0; }
+.stack { display: flex; flex-direction: column-reverse; border-radius: 6px 6px 2px 2px; overflow: hidden; background: var(--track); min-height: 2px; }
+.stack span { display: block; }
+.stack .fp { background: var(--fp); } .stack .pde { background: var(--pde); } .stack .ml { background: var(--ml); } .stack .cn { background: var(--cn); }
+.col .h { font: 600 12px var(--font-mono); text-align: center; font-variant-numeric: tabular-nums; }
+.col .d { font-size: 12px; color: var(--muted); text-align: center; }
+.col.today .d { color: var(--ink); font-weight: 700; }
+.chartwrap { position: relative; }
+.targetline { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--muted); opacity: .6; pointer-events: none; }
+.col { position: relative; }
+.tmark { position: absolute; left: 8%; right: 8%; border-top: 2px dotted var(--muted); opacity: .7; pointer-events: none; }
+.targetline em { position: absolute; right: 0; top: -18px; font: 500 11px var(--font-mono); font-style: normal; color: var(--muted); }
+
+/* Forms */
+form.add { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; align-items: end; }
+label.f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 500; min-width: 0; }
+input, select { font: 15px var(--font-body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; width: 100%; min-width: 0; }
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--fp); outline-offset: 2px; }
+.btn { font: 600 14px var(--font-body); border-radius: 8px; padding: 10px 16px; cursor: pointer; border: 1px solid var(--fp); background: var(--fp); color: var(--accent-ink); }
+.btn.ghost { background: var(--surface); color: var(--fp); }
+.btn:disabled { opacity: .5; cursor: default; }
+.formmsg { grid-column: 1 / -1; font-size: 13px; color: var(--muted); min-height: 18px; margin: 0; }
+
+/* Log */
+ul.log { list-style: none; margin: 0; padding: 0; }
+ul.log > li { border-top: 1px solid var(--line); font-size: 14px; }
+ul.log > li:first-child { border-top: 0; }
+.tag { font: 600 11.5px var(--font-body); padding: 2px 8px; border-radius: 999px; }
+.tag.fp { background: var(--fp-soft); color: var(--fp); }
+.tag.ml { background: var(--ml-soft); color: var(--ml); }
+.tag.cn { background: var(--cn-soft); color: var(--cn); }
+.tag.pde { background: var(--pde-soft); color: var(--pde); }
+.when { color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dur { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; }
+.del { font: 500 12.5px var(--font-body); border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 6px; padding: 4px 9px; cursor: pointer; }
+.del.confirm { border-color: var(--warn); color: var(--warn); }
+.empty { color: var(--muted); font-size: 14px; margin: 0; }
+.more { margin-top: 10px; }
+.btns { display: flex; gap: 10px; flex-wrap: wrap; }
+.big.pause { background: var(--surface); color: var(--ink); border: 1px solid var(--line); min-width: 120px; }
+.big.sbreak { background: var(--good); color: var(--accent-ink); min-width: 150px; }
+.big.bigbrk { background: var(--surface); color: var(--pde); border: 1px solid var(--pde); min-width: 120px; }
+.tl .bigbr { background: repeating-linear-gradient(90deg, var(--muted) 0 2px, transparent 2px 5px); opacity: .55; }
+.sw.bigbr { background: repeating-linear-gradient(90deg, var(--muted) 0 2px, transparent 2px 4px); }
+.runinfo .bigb { color: var(--pde); font-weight: 600; }
+.big.sbreak:disabled { background: var(--track); color: var(--muted); opacity: 1; }
+.rules { font-size: 13px; color: var(--muted); margin: 0; }
+.runinfo .paused { color: var(--warn); font-weight: 600; }
+.timer-foot { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+.chk { display: inline-flex; gap: 8px; align-items: center; font-size: 13.5px; color: var(--muted); cursor: pointer; }
+.chk input { width: 16px; height: 16px; accent-color: var(--fp); }
+.toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: min(520px, calc(100% - 32px)); display: flex; flex-direction: column; gap: 8px; z-index: 10; }
+.toast { background: var(--ink); color: var(--surface); border-radius: 10px; padding: 12px 14px; font-size: 14.5px; line-height: 1.45; box-shadow: 0 6px 24px rgba(0,0,0,.25); display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; }
+.toast strong { display: block; font-size: 15px; }
+.toast button { background: none; border: 0; color: inherit; opacity: .7; font: 600 13px var(--font-body); cursor: pointer; padding: 2px 4px; }
+.toast button:hover { opacity: 1; }
+.breaks { border-top: 1px dashed var(--line); padding-top: 12px; font-size: 14px; }
+.breaks[hidden] { display: none; }
+.breaks details > summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; gap: 10px; align-items: baseline; font-size: 12.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.breaks details > summary::-webkit-details-marker { display: none; }
+.breaks details > summary::before { content: "›"; display: inline-block; margin-right: 8px; transition: transform .15s; font-size: 15px; }
+.breaks details[open] > summary::before { transform: rotate(90deg); }
+.breaks details > summary .sumv { font: 600 12.5px var(--font-mono); text-transform: none; letter-spacing: 0; color: var(--ink); margin-left: auto; }
+.breaks details > summary:focus-visible { outline: 2px solid var(--fp); outline-offset: 2px; border-radius: 4px; }
+.brbody { margin-top: 12px; display: flex; flex-direction: column; gap: 12px; }
+.tl { position: relative; height: 26px; border-radius: 6px; overflow: hidden; display: flex; background: var(--track); }
+.tl span { display: block; height: 100%; min-width: 1px; }
+.tl .st.fp { background: var(--fp); } .tl .st.pde { background: var(--pde); } .tl .st.ml { background: var(--ml); } .tl .st.cn { background: var(--cn); }
+.tl .br, .tl .br.early { background: repeating-linear-gradient(45deg, var(--warn) 0 4px, var(--warn-soft) 4px 8px); }
+.tl .br.study { background: radial-gradient(circle, var(--good) 1.6px, transparent 2px) 0 0 / 7px 7px, color-mix(in srgb, var(--good) 22%, var(--surface)); }
+.sw.study { background: radial-gradient(circle, var(--good) 1.2px, transparent 1.6px) 0 0 / 5px 5px, color-mix(in srgb, var(--good) 22%, var(--surface)); }
+.sw.early { background: repeating-linear-gradient(45deg, var(--warn) 0 3px, var(--warn-soft) 3px 6px); }
+.bk { font: 600 10.5px var(--font-body); text-transform: uppercase; letter-spacing: .05em; padding: 1px 7px; border-radius: 999px; margin-left: 6px; }
+.bk.study { color: var(--good); background: color-mix(in srgb, var(--good) 16%, var(--surface)); }
+.bk.early { color: var(--warn); background: var(--warn-soft); }
+.bk.big { color: var(--pde); background: var(--pde-soft); }
+.nudge { border: 1.5px solid var(--good); background: color-mix(in srgb, var(--good) 10%, var(--surface)); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.nudge[hidden] { display: none; }
+.nudge strong { font-size: 16px; }
+.nudge p { margin: 0; color: var(--muted); font-size: 14px; }
+.nudge .acts { display: flex; gap: 10px; flex-wrap: wrap; }
+.nudge .take { background: var(--good); border-color: var(--good); color: var(--accent-ink); }
+.runinfo .studyb { color: var(--good); font-weight: 600; }
+.tags { display: inline-flex; gap: 4px; }
+.tl.daytl { height: 30px; }
+.tl.daytl .bigbr { opacity: .35; }
+.tl.daytl .rest { background: transparent; }
+.dayflag { margin: 0; font-size: 13px; color: var(--muted); border-left: 3px solid var(--line); padding-left: 8px; }
+.subsessions { display: flex; flex-direction: column; gap: 6px; }
+details.subsess { border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; background: var(--bg); }
+details.subsess > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 8px 0; font-size: 13.5px; }
+details.subsess > summary::-webkit-details-marker { display: none; }
+details.subsess > summary:focus-visible { outline: 2px solid var(--fp); outline-offset: 2px; border-radius: 4px; }
+details.subsess .notes { padding-bottom: 10px; }
+.backat { display: inline-flex; align-items: baseline; gap: 6px; margin-top: 6px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--good); color: var(--good); font-size: 14px; font-weight: 600; }
+.backat b { font-size: 17px; font-variant-numeric: tabular-nums; }
+.backat.late { border-color: var(--warn); color: var(--warn); }
+.backat[hidden] { display: none; }
+.tlaxis { display: flex; justify-content: space-between; font: 500 11.5px var(--font-mono); color: var(--muted); margin-top: 4px; }
+.tltot { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+.tltot div { background: var(--bg); border-radius: 8px; padding: 8px 10px; }
+.tltot b { display: block; font: 600 18px var(--font-mono); font-variant-numeric: tabular-nums; }
+.tltot small { font-size: 12px; color: var(--muted); }
+.sw.br { background: repeating-linear-gradient(45deg, var(--warn) 0 3px, var(--warn-soft) 3px 6px); }
+.breaks h3 { font-size: 12.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 0 0 6px; }
+.breaks ol { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.breaks li { display: flex; justify-content: space-between; gap: 10px; font-variant-numeric: tabular-nums; }
+.breaks li .t { color: var(--muted); }
+.breaks li .m { font-family: var(--font-mono); font-weight: 600; }
+.breaks li.now .m { color: var(--warn); }
+.breaks .tot { color: var(--muted); }
+.gaps { grid-column: 1 / -1; font-size: 13px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 8px; margin-top: 4px; }
+.gaps b { color: var(--ink); font-weight: 600; font-family: var(--font-mono); white-space: nowrap; }
+details.sess { width: 100%; }
+details.sess > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: auto 1fr auto auto; gap: 10px; align-items: center; padding: 9px 0; }
+details.sess > summary::-webkit-details-marker { display: none; }
+details.sess > summary .chev { color: var(--muted); transition: transform .15s; font-size: 15px; }
+details.sess[open] > summary .chev { transform: rotate(90deg); }
+details.sess > summary:focus-visible { outline: 2px solid var(--fp); outline-offset: 2px; border-radius: 4px; }
+.sbody { padding: 4px 0 14px; display: flex; flex-direction: column; gap: 12px; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin: 0; }
+.facts div { background: var(--bg); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.facts dt { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.facts dd { margin: 2px 0 0; font: 600 15px var(--font-mono); font-variant-numeric: tabular-nums; }
+.ins { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ins li { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; font-size: 14px; line-height: 1.5; border: 0 !important; padding: 0 !important; }
+.ins .k { font: 600 10.5px var(--font-body); text-transform: uppercase; letter-spacing: .06em; padding: 2px 7px; border-radius: 999px; margin-top: 2px; white-space: nowrap; }
+.ins .k.good { background: var(--fp-soft); color: var(--fp); }
+.ins .k.tip { background: var(--warn-soft); color: var(--warn); }
+.ins .k.note { background: var(--pde-soft); color: var(--pde); }
+.sbody h4 { margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.notes { display: flex; flex-direction: column; gap: 6px; }
+.notes textarea { font: 14.5px/1.45 var(--font-body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; resize: vertical; min-height: 60px; width: 100%; }
+.notes .row2 { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.notes .saved { font-size: 12.5px; color: var(--muted); }
+header .hrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.viewbtn { font: 600 13.5px var(--font-body); border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 7px 14px; cursor: pointer; }
+.viewbtn:hover { border-color: var(--fp); color: var(--fp); }
+/* Notification panel (phone view) */
+#panel { --p-bg: #0e1413; --p-card: rgba(255,255,255,.08); --p-ink: #eef4f2; --p-muted: #a3b3b0; --p-line: rgba(255,255,255,.12);
+  background: radial-gradient(120% 60% at 50% 0%, #1d2b29 0%, var(--p-bg) 60%); color: var(--p-ink); min-height: 100vh; padding: 18px 14px 40px; }
+#panel[hidden], .wrap[hidden] { display: none !important; }
+.pn { max-width: 460px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+.pn-top { display: flex; justify-content: space-between; align-items: flex-end; padding: 6px 4px 10px; }
+.pn-time { font: 600 52px/1 var(--font-mono); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.pn-date { color: var(--p-muted); font-size: 14px; margin-top: 4px; }
+.pn-back { font: 600 13px var(--font-body); color: var(--p-ink); background: var(--p-card); border: 1px solid var(--p-line); border-radius: 999px; padding: 7px 12px; cursor: pointer; }
+.pn-card { background: var(--p-card); border: 1px solid var(--p-line); border-radius: 18px; padding: 14px 15px; backdrop-filter: blur(6px); }
+.pn-head { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--p-muted); margin-bottom: 6px; }
+.pn-ic { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; font: 700 11px var(--font-body); color: #0e1413; flex: none; }
+.pn-ic.fp { background: #5cc6b6; } .pn-ic.pde { background: #b39cf0; } .pn-ic.ml { background: #8cbcf2; } .pn-ic.cn { background: #f08bb4; } .pn-ic.ok { background: #6fd08a; } .pn-ic.idle { background: #a3b3b0; } .pn-ic.warn { background: #e3a64e; }
+.pn-head .ago { margin-left: auto; }
+.pn-title { font-weight: 700; font-size: 16px; line-height: 1.3; }
+.pn-body { font-size: 14px; color: var(--p-ink); opacity: .85; margin-top: 3px; line-height: 1.45; }
+.pn-big { font: 600 34px/1.1 var(--font-mono); font-variant-numeric: tabular-nums; margin: 4px 0 2px; }
+.pn-bar { height: 8px; border-radius: 999px; background: rgba(255,255,255,.12); overflow: hidden; display: flex; margin-top: 8px; }
+.pn-bar span { height: 100%; } .pn-bar .fp { background: #5cc6b6; } .pn-bar .pde { background: #b39cf0; } .pn-bar .ml { background: #8cbcf2; } .pn-bar .cn { background: #f08bb4; }
+.pn-row { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; margin-top: 6px; }
+.pn-row b { font-family: var(--font-mono); font-weight: 600; }
+.pn-acts { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.pn-acts button { flex: 1; min-width: 90px; font: 600 14px var(--font-body); border-radius: 12px; padding: 11px 10px; cursor: pointer; border: 1px solid var(--p-line); background: rgba(255,255,255,.1); color: var(--p-ink); }
+.pn-acts button.pri { background: #5cc6b6; color: #0e1413; border-color: #5cc6b6; }
+.pn-acts button.grn { background: #6fd08a; color: #0e1413; border-color: #6fd08a; }
+.pn-acts button:disabled { opacity: .45; cursor: default; }
+.pn-sec { font-size: 12.5px; color: var(--p-muted); text-transform: uppercase; letter-spacing: .08em; padding: 10px 4px 2px; display: flex; justify-content: space-between; }
+.pn-sec button { background: none; border: 0; color: var(--p-muted); font: inherit; cursor: pointer; text-transform: none; letter-spacing: 0; }
+.pn-empty { color: var(--p-muted); font-size: 14px; padding: 6px 4px; }
+#panel button:focus-visible { outline: 2px solid #5cc6b6; outline-offset: 2px; }
+.exam { display: grid; gap: 12px; }
+.exrow { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: baseline; padding: 10px 12px; border-radius: 10px; background: var(--bg); border-left: 4px solid var(--line); }
+.exrow.ok { border-left-color: var(--good); } .exrow.tight { border-left-color: var(--warn); } .exrow.behind { border-left-color: #c2410c; } .exrow.done { border-left-color: var(--muted); }
+.exrow .nm { font-weight: 700; }
+.exrow .dl { font: 600 14px var(--font-mono); font-variant-numeric: tabular-nums; }
+.exrow .ln { grid-column: 1 / -1; font-size: 13.5px; color: var(--muted); }
+.exrow .st { font: 600 11px var(--font-body); text-transform: uppercase; letter-spacing: .06em; padding: 2px 8px; border-radius: 999px; margin-left: 6px; }
+.exrow.ok .st { color: var(--good); background: color-mix(in srgb, var(--good) 16%, var(--surface)); }
+.exrow.tight .st { color: var(--warn); background: var(--warn-soft); }
+.exrow.behind .st { color: #c2410c; background: color-mix(in srgb, #c2410c 14%, var(--surface)); }
+.exrow.done .st { color: var(--muted); background: var(--track); }
+.modal { position: fixed; inset: 0; background: rgba(10,15,14,.55); display: grid; place-items: center; padding: 16px; z-index: 20; }
+.modal[hidden] { display: none; }
+.modal .box { background: var(--surface); color: var(--ink); border-radius: 14px; padding: 18px; width: min(480px, 100%); display: flex; flex-direction: column; gap: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.3); }
+.modal h3 { margin: 0; font-size: 18px; }
+.modal p { margin: 0; color: var(--muted); font-size: 14px; }
+.modal .acts { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+.review { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; background: var(--bg); }
+.review .top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.review .score { font: 600 28px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.review .score small { font-size: 13px; color: var(--muted); }
+.review .grade { font: 700 12px var(--font-body); text-transform: uppercase; letter-spacing: .06em; padding: 4px 10px; border-radius: 999px; }
+.review .grade.g4 { color: var(--good); background: color-mix(in srgb, var(--good) 16%, var(--surface)); }
+.review .grade.g3 { color: var(--fp); background: var(--fp-soft); }
+.review .grade.g2 { color: var(--warn); background: var(--warn-soft); }
+.review .grade.g1 { color: #b42318; background: color-mix(in srgb, #b42318 12%, var(--surface)); }
+.review .bars { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.review .bars div { font-size: 12px; color: var(--muted); }
+.review .bars i { display: block; height: 6px; border-radius: 999px; background: var(--track); margin-top: 4px; overflow: hidden; }
+.review .bars i b { display: block; height: 100%; background: var(--fp); }
+.daypie { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 14px; align-items: center; }
+.daypie svg { width: 150px; height: 150px; display: block; }
+.daypie ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.daypie li { display: grid !important; grid-template-columns: 12px 1fr auto; gap: 8px; align-items: center; font-size: 13.5px; border: 0 !important; padding: 0 !important; }
+.daypie li .dot2 { width: 12px; height: 12px; border-radius: 3px; }
+.daypie li .v { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.daypie li .v b { color: var(--ink); font-weight: 600; }
+.daypie .ctr1 { font: 600 17px var(--font-mono); fill: var(--ink); }
+.daypie .ctr2 { font: 500 10px var(--font-body); fill: var(--muted); letter-spacing: .04em; }
+@media (max-width: 480px) { .daypie { grid-template-columns: 1fr; justify-items: center; } .daypie ul { width: 100%; } }
+details.settings summary { cursor: pointer; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+details.settings form { margin-top: 14px; }
+.calhead { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.calhead h2 { margin: 0; }
+.calnav { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; }
+.calnav span { min-width: 120px; text-align: center; }
+.calnav button { font: 600 16px var(--font-body); width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+.calnav button:disabled { opacity: .4; cursor: default; }
+.calsum { font-size: 13.5px; color: var(--muted); margin: 6px 0 10px; }
+.calsum b { color: var(--ink); }
+.calgrid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+#calDow { margin-bottom: 4px; font-size: 11.5px; color: var(--muted); text-align: center; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.calcell { position: relative; min-height: 54px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); padding: 4px 5px 8px; display: flex; flex-direction: column; justify-content: space-between; font: inherit; color: var(--ink); text-align: left; min-width: 0; overflow: hidden; }
+button.calcell { cursor: pointer; }
+button.calcell:hover { border-color: var(--ink); }
+.calcell.blank { border: 0; background: transparent; }
+.calcell.future { opacity: .45; }
+.calcell.today { outline: 2px solid var(--ink); outline-offset: -1px; }
+.calcell .dn { font-size: 12px; font-weight: 600; color: var(--muted); }
+.calcell .hrs { font: 600 12.5px var(--font-mono); }
+.calcell .sb { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; display: flex; }
+.calcell .sb span { height: 100%; }
+.calcell.exam .dn::after { content: " ★"; color: var(--warn); }
+.l1, .calcell.l1 { background: color-mix(in srgb, var(--good) 12%, var(--surface)); }
+.l2, .calcell.l2 { background: color-mix(in srgb, var(--good) 24%, var(--surface)); }
+.l3, .calcell.l3 { background: color-mix(in srgb, var(--good) 38%, var(--surface)); }
+.l4, .calcell.l4 { background: color-mix(in srgb, var(--good) 55%, var(--surface)); }
+.calcell.l1 .dn, .calcell.l2 .dn, .calcell.l3 .dn, .calcell.l4 .dn { color: var(--ink); }
+i.cl { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--line); vertical-align: -2px; margin-right: 4px; }
+.callegend { flex-wrap: wrap; }
+@media (max-width: 420px) { .calcell { min-height: 46px; padding: 3px 3px 7px; } .calcell .hrs { font-size: 11px; } }
+.subjlist { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 8px; }
+.subjlist li { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.subjlist .swb { width: 14px; height: 14px; border-radius: 4px; }
+.subjlist .nm { font-weight: 600; min-width: 0; }
+.subjlist .nm small { display: block; font-weight: 400; color: var(--muted); font-size: 12.5px; }
+.subjlist button { font: 600 12.5px var(--font-body); border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+.subjlist button.confirm { border-color: #b42318; color: #b42318; }
+.subjlist .swb.fp { background: var(--fp); } .subjlist .swb.pde { background: var(--pde); } .subjlist .swb.ml { background: var(--ml); } .subjlist .swb.cn { background: var(--cn); }
+.fxwide { grid-column: 1 / -1; }
+.fxmode { display: grid; gap: 6px; }
+.fxmode label { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; cursor: pointer; }
+.fxmode input { width: 16px; height: 16px; flex: none; margin: 3px 0 0; padding: 0; accent-color: var(--fp); }
+.fxmode span { min-width: 0; }
+.fxmode small { color: var(--muted); }
+.fxprev { color: var(--ink); }
+.fxprev.bad { color: #b42318; }
+input[type="color"] { height: 38px; padding: 2px; }
+@media (max-width: 480px) {
+  details.sess > summary { grid-template-columns: auto 1fr auto; }
+  details.sess > summary .when { grid-column: 1 / -1; order: 5; }
+  details.sess > summary .when { white-space: normal; }
+  details.sess > summary .chev { display: none; }
+  .big { width: 100%; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="hrow"><h1>Study Hours</h1><button type="button" class="viewbtn" id="toPanel">Notification panel</button></div>
+    <p><span id="subjLine">Machine Learning and Computer Networks</span>. Start the timer when you sit down. Each hour is 45 minutes of study plus one 15-minute study break; you'll be prompted at 45 minutes and 1 hour. Stop the timer when you finish.</p>
+  </header>
+
+  <p class="status" id="status" hidden></p>
+
+  <section class="card timer" aria-labelledby="t-h">
+    <h2 id="t-h">Timer</h2>
+    <div class="seg" role="group" aria-label="Subject" id="pick"></div>
+    <div class="clock-row">
+      <div>
+        <div class="clock" id="clock" aria-live="off">0:00:00</div>
+        <div class="runinfo" id="runinfo">Not running</div>
+        <div class="backat" id="backat" role="status" hidden>Be back at <b id="backatT">--:--</b></div>
+      </div>
+      <div class="btns">
+        <button type="button" class="big sbreak" id="sbBtn" hidden>Study break</button>
+        <button type="button" class="big pause" id="pauseBtn" hidden>Pause</button>
+        <button type="button" class="big bigbrk" id="bigBtn" hidden>Big break</button>
+        <button type="button" class="big" id="startStop" disabled>Start</button>
+      </div>
+    </div>
+    <p class="rules" id="rules" hidden>Each hour: 45 min studying, then one 15-min study break, plus a 1-minute grace to get back. Pause, and any time past the grace minute, count as early pauses, but a pause under 1 minute is forgiven. Big break is for life stuff: it's timed and logged separately, but never counts as study or break time and isn't drawn on the graph.</p>
+    <div class="nudge" id="nudge" hidden role="alertdialog" aria-labelledby="nudgeT" aria-describedby="nudgeP">
+      <strong id="nudgeT">45 minutes of focus. Take a break?</strong>
+      <p id="nudgeP">A 15-minute study break now helps you keep going.</p>
+      <div class="acts">
+        <button type="button" class="btn take" id="nudgeTake">Take a 15-min study break</button>
+        <button type="button" class="btn ghost" id="nudgeSkip">Keep going</button>
+      </div>
+    </div>
+    <div class="breaks" id="breaks" hidden>
+      <details id="brDet" open>
+        <summary><span>Breaks this session</span><span class="sumv" id="brSum"></span></summary>
+        <div class="brbody" id="brBody"></div>
+      </details>
+    </div>
+    <div class="timer-foot">
+      <button type="button" class="btn ghost" id="progressBtn">Progress check</button>
+      <label class="chk" for="chime"><input type="checkbox" id="chime"> Chime on milestones</label>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="d-h">
+    <h2 id="d-h">Today</h2>
+    <div class="row">
+      <span class="lbl" id="todayLbl">0h 00m studied</span>
+      <span class="num" id="todayNum"><b>0.0</b> / 8.5 h</span>
+      <div class="bar" id="todayBar"></div>
+      <span class="sub" id="todaySub"></span>
+      <span class="gaps" id="todayGaps"></span>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="ex-h">
+    <h2 id="ex-h">Exam countdown</h2>
+    <div class="exam" id="exam"></div>
+  </section>
+
+  <section class="card" aria-labelledby="tot-h">
+    <h2 id="tot-h">Totals vs target</h2>
+    <div id="totals" style="display:grid;gap:14px"></div>
+  </section>
+
+  <section class="card" aria-labelledby="a-h">
+    <h2 id="a-h">Add time manually</h2>
+    <form class="add" id="addForm">
+      <label class="f" for="aSubject">Subject
+        <select id="aSubject"></select>
+      </label>
+      <label class="f" for="aHours">Hours
+        <input id="aHours" type="number" min="0" max="16" step="1" value="1" inputmode="numeric">
+      </label>
+      <label class="f" for="aMins">Minutes
+        <input id="aMins" type="number" min="0" max="59" step="5" value="0" inputmode="numeric">
+      </label>
+      <label class="f" for="aDate">Date
+        <input id="aDate" type="date">
+      </label>
+      <button class="btn" type="submit" id="aBtn">Add</button>
+      <p class="formmsg" id="aMsg"></p>
+    </form>
+  </section>
+
+  <section class="card" aria-labelledby="w-h">
+    <h2 id="w-h">Last 7 days</h2>
+    <div class="chartwrap">
+      <div class="week" id="week"></div>
+    </div>
+    <div class="legend" id="weekLegend"></div>
+  </section>
+
+  <section class="card" aria-labelledby="cal-h">
+    <div class="calhead">
+      <h2 id="cal-h">Study calendar</h2>
+      <div class="calnav">
+        <button type="button" id="calPrev" aria-label="Previous month">‹</button>
+        <span id="calTitle" aria-live="polite"></span>
+        <button type="button" id="calNext" aria-label="Next month">›</button>
+      </div>
+    </div>
+    <p class="calsum" id="calSum"></p>
+    <div class="calgrid" id="calDow" aria-hidden="true"></div>
+    <div class="calgrid" id="calGrid" role="grid" aria-labelledby="cal-h"></div>
+    <div class="legend callegend"><span><i class="cl l1"></i>Under ¼ of your goal</span><span><i class="cl l2"></i>Under ½</span><span><i class="cl l3"></i>Under goal</span><span><i class="cl l4"></i>Goal reached</span><span>Tap a day to open it under Sessions</span></div>
+  </section>
+
+  <section class="card" aria-labelledby="l-h">
+    <h2 id="l-h">Sessions</h2>
+    <p class="formmsg" style="margin:-4px 0 8px">Each day is one session, from 00:00 to midnight. Tap a day for its timeline, review, pie chart, insights and notes. Time between a Stop and the next Start counts as a big break.</p>
+    <ul class="log" id="log"></ul>
+    <p class="empty" id="logEmpty">No sessions yet. Start the timer or add time above.</p>
+    <button type="button" class="btn ghost more" id="showMore" hidden>Show all</button>
+  </section>
+
+  <section class="card" aria-labelledby="ex2-h">
+    <details class="settings" id="exDet">
+      <summary id="ex2-h">Exams and subjects</summary>
+      <p class="formmsg" style="margin-top:10px">Add an exam to study for: give it a date and the number of hours you want to put in. It gets its own timer button, total, countdown and colour.</p>
+      <ul class="subjlist" id="subjList"></ul>
+      <form class="add" id="exForm">
+        <label class="f" for="exName">Exam or subject<input id="exName" type="text" maxlength="40" autocomplete="off" placeholder="e.g. Operating Systems"></label>
+        <label class="f" for="exShort">Short name<input id="exShort" type="text" maxlength="8" autocomplete="off" placeholder="e.g. OS"></label>
+        <label class="f" for="exDate">Exam date<input id="exDate" type="date"></label>
+        <label class="f" for="exTarget">Target (h)<input id="exTarget" type="number" min="1" max="300" step="0.5" value="30"></label>
+        <label class="f" for="exColor">Colour<input id="exColor" type="color" value="#d9480f"></label>
+        <button class="btn" type="submit" id="exBtn">Add exam</button>
+        <p class="formmsg" id="exMsg"></p>
+      </form>
+    </details>
+  </section>
+
+  <section class="card" aria-labelledby="fx-h">
+    <details class="settings" id="fxDet">
+      <summary id="fx-h">Fix time</summary>
+      <p class="formmsg" style="margin-top:10px">Forgot to pause while you were away, or forgot to resume when you got back? Pick the session, say what really happened and when, and the timer is corrected.</p>
+      <form class="add" id="fxForm">
+        <label class="f fxwide" for="fxSess">Session<select id="fxSess"></select></label>
+        <div class="fxmode fxwide" role="radiogroup" aria-label="What happened">
+          <label><input type="radio" name="fxMode" value="away" checked><span>I was away, but the timer kept running <small>(removes study time)</small></span></label>
+          <label><input type="radio" name="fxMode" value="study"><span>I was studying, but the timer was paused <small>(adds study time)</small></span></label>
+        </div>
+        <label class="f" for="fxFrom">From<input id="fxFrom" type="datetime-local"></label>
+        <label class="f" for="fxTo">Until<input id="fxTo" type="datetime-local"></label>
+        <label class="f" for="fxKind" id="fxKindL">Count the time away as<select id="fxKind"><option value="early">Early pause</option><option value="study">Study break</option><option value="big">Big break (not counted)</option></select></label>
+        <p class="formmsg fxprev" id="fxPrev"></p>
+        <button class="btn" type="submit" id="fxBtn" disabled>Apply fix</button>
+        <p class="formmsg" id="fxMsg"></p>
+      </form>
+    </details>
+  </section>
+
+  <section class="card">
+    <details class="settings">
+      <summary>Targets</summary>
+      <form class="add" id="tForm">
+        <span id="tSubj" style="display:contents"></span>
+        <label class="f" for="tDay">Daily (h)<input id="tDay" type="number" min="1" max="16" step="0.5" value="8.5"></label>
+        <button class="btn" type="submit">Save targets</button>
+        <p class="formmsg" id="tMsg"></p>
+      </form>
+      <div class="add" style="margin-top:14px">
+        <button class="btn ghost" type="button" id="clearBreaks">Clear break history</button>
+        <p class="formmsg" id="cbMsg">Removes all recorded breaks and between-session gaps up to now. Study time is kept.</p>
+      </div>
+    </details>
+  </section>
+</div>
+
+<div id="panel" hidden>
+  <div class="pn">
+    <div class="pn-top">
+      <div><div class="pn-time" id="pnClock">--:--</div><div class="pn-date" id="pnDate"></div></div>
+      <button type="button" class="pn-back" id="toTracker">Full tracker</button>
+    </div>
+    <div id="pnLive"></div>
+    <div id="pnToday"></div>
+    <div id="pnTotals"></div>
+    <div id="pnLast"></div>
+    <div class="pn-sec"><span>Notifications</span><button type="button" id="pnClear">Clear</button></div>
+    <div id="pnFeed"></div>
+  </div>
+</div>
+
+<div class="modal" id="stopAsk" hidden role="alertdialog" aria-modal="true" aria-labelledby="stopT" aria-describedby="stopP">
+  <div class="box">
+    <h3 id="stopT">Stop this session?</h3>
+    <p id="stopP"></p>
+    <p>Stopping ends the session and logs it. If you're only stepping away, use <strong>Pause</strong>, <strong>Study break</strong> or <strong>Big break</strong> instead.</p>
+    <div class="acts">
+      <button type="button" class="btn ghost" id="stopNo">Keep the session going</button>
+      <button type="button" class="btn" id="stopYes" style="background:#b42318;border-color:#b42318">Stop and log it</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="recall" hidden role="dialog" aria-modal="true" aria-labelledby="recallT">
+  <div class="box">
+    <h3 id="recallT">Quick recall: 3 things you just learned</h3>
+    <p id="recallP">Write them from memory, without looking at your notes. It takes a minute and locks the session in.</p>
+    <label class="f" for="rc1">1<input id="rc1" type="text" maxlength="300" autocomplete="off"></label>
+    <label class="f" for="rc2">2<input id="rc2" type="text" maxlength="300" autocomplete="off"></label>
+    <label class="f" for="rc3">3<input id="rc3" type="text" maxlength="300" autocomplete="off"></label>
+    <div class="acts">
+      <button type="button" class="btn ghost" id="rcSkip">Skip</button>
+      <button type="button" class="btn" id="rcSave">Save to session notes</button>
+    </div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+(function () {
+  // Every subject ever tracked. History keeps old subjects; the timer, totals and countdown show the
+  // "active" ones: subjects whose exam is today or later (or the latest exam set once all are done).
+  var BUILTIN = {
+    fp: { name: "Functional Programming", short: "FP", tip: "For FP, end each block by writing one drill or definition from memory." },
+    pde: { name: "PDEs", short: "PDEs", tip: "For PDEs, end each block by working one problem without notes, then checking it." },
+    ml: { name: "Machine Learning", short: "ML", tip: "For ML, end each block by deriving one method from memory (a loss, a gradient step, a model's assumptions), then checking it." },
+    cn: { name: "Computer Networks", short: "CN", tip: "For Networks, end each block by drawing one protocol or exchange from memory (layers, a handshake, a routing step), then checking it." }
+  };
+  var SUBJ = {}, KEYS = [], NAMES = {}, SHORT = {};
+  var PALETTE = ["#d9480f", "#2b8a3e", "#c2255c", "#1971c2", "#e67700", "#0b7285", "#862e9c", "#5c940d"];
+  // custom subjects (added in the Exams tab) live in state.subjects: { key: { name, short, color, added } }
+  function cleanSubjects(c) {
+    var out = {};
+    if (!c || typeof c !== "object") return out;
+    Object.keys(c).forEach(function (k) {
+      var v = c[k];
+      if (!/^c[a-z0-9]{2,14}$/.test(k) || !v || typeof v.name !== "string" || !v.name.trim()) return;
+      out[k] = {
+        name: v.name.trim().slice(0, 40),
+        short: (typeof v.short === "string" && v.short.trim() ? v.short.trim() : v.name.trim()).slice(0, 8),
+        color: /^#[0-9a-fA-F]{6}$/.test(v.color) ? v.color : PALETTE[0],
+        added: typeof v.added === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.added) ? v.added : ""
+      };
+    });
+    return out;
+  }
+  function setSubjects(custom) {
+    state.subjects = cleanSubjects(custom);
+    SUBJ = Object.assign({}, BUILTIN);
+    Object.keys(state.subjects).forEach(function (k) {
+      var c = state.subjects[k];
+      SUBJ[k] = { name: c.name, short: c.short, color: c.color, added: c.added, custom: true,
+        tip: "For " + c.short + ", end each block by writing the key idea from memory, then checking it against your notes." };
+    });
+    KEYS = Object.keys(SUBJ); NAMES = {}; SHORT = {};
+    KEYS.forEach(function (k) { NAMES[k] = SUBJ[k].name; SHORT[k] = SUBJ[k].short; });
+    var css = Object.keys(state.subjects).map(function (k) {
+      var c = state.subjects[k].color;
+      return ":root{--" + k + ":" + c + ";--" + k + "-soft:color-mix(in srgb," + c + " 16%,var(--surface));}" +
+        ".seg button[aria-pressed=\"true\"]." + k + ",.big." + k + "{background:var(--" + k + ");color:#fff}" +
+        ".bar ." + k + ",.sw." + k + ",.stack ." + k + ",.tl .st." + k + ",.pn-ic." + k + ",.pn-bar ." + k + ",.subjlist .swb." + k + "{background:var(--" + k + ")}" +
+        ".tag." + k + "{background:var(--" + k + "-soft);color:var(--" + k + ")}";
+    }).join("\n");
+    var el = document.getElementById("subjCss");
+    if (!el) { el = document.createElement("style"); el.id = "subjCss"; document.head.appendChild(el); }
+    el.textContent = css;
+  }
+  var DEFAULT_TARGETS = { fp: 28, pde: 22, ml: 35, cn: 35, daily: 8.5 };
+  var DEFAULT_EXAMS = { fp: "2026-10-15", pde: "2026-10-16", ml: "2026-10-29", cn: "2026-10-29" };
+  function zeros() { var o = {}; KEYS.forEach(function (k) { o[k] = 0; }); return o; }
+  function sumKeys(o) { return KEYS.reduce(function (a, k) { return a + (o[k] || 0); }, 0); }
+  function validSubj(k) { return SUBJ.hasOwnProperty(k) ? k : "fp"; }
+  function activeKeys() {
+    var today = localDate(Date.now());
+    var act = KEYS.filter(function (k) { return state.exams[k] >= today; });
+    if (!act.length) {
+      var last = KEYS.reduce(function (a, k) { return state.exams[k] > a ? state.exams[k] : a; }, "");
+      act = KEYS.filter(function (k) { return state.exams[k] === last; });
+    }
+    if (state.running && act.indexOf(state.running.subject) < 0) act.push(state.running.subject);
+    return act;
+  }
+  function pastKeys() { var act = activeKeys(); return KEYS.filter(function (k) { return act.indexOf(k) < 0; }).sort(function (a, b) { return state.exams[a] < state.exams[b] ? 1 : -1; }); }
+  function allOrdered() { return activeKeys().concat(pastKeys()); }
+  function joinNames(list) { return list.length < 2 ? list.join("") : list.slice(0, -1).join(", ") + " and " + list[list.length - 1]; }
+
+  var state = { running: null, targets: Object.assign({}, DEFAULT_TARGETS), breaksClearedAt: 0, breaksReset1: false, exams: Object.assign({}, DEFAULT_EXAMS), dailyLog: [], subjects: {} };
+  setSubjects({});
+  function cleanExams(e) {
+    var ok = function (v) { return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v); };
+    var out = {}; KEYS.forEach(function (k) { out[k] = e && ok(e[k]) ? e[k] : (DEFAULT_EXAMS[k] || addDays(localDate(Date.now()), 14)); }); return out;
+  }
+  var openIds = {};
+  var sessions = [];          // [{id, subject, minutes, date, source, startedAt}]
+  var picked = "ml";
+  var showAll = false;
+  var store = null;           // adapter: {saveState, addSession, deleteSession}
+  var busy = false;
+
+  var $ = function (id) { return document.getElementById(id); };
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function localDate(ts) { var d = new Date(ts); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function hm(mins) { mins = Math.round(mins); return Math.floor(mins / 60) + "h " + pad(mins % 60) + "m"; }
+  function clockText(ms) { var s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 3600) + ":" + pad(Math.floor(s / 60) % 60) + ":" + pad(s % 60); }
+  function status(msg) { var el = $("status"); el.textContent = msg || ""; el.hidden = !msg; }
+  // daily goal history: [[fromDate, hours], ...] so a new goal only applies from the day it was set
+  function cleanDailyLog(l) {
+    return (Array.isArray(l) ? l : []).filter(function (x) { return x && typeof x[0] === "string" && Number(x[1]) > 0; })
+      .map(function (x) { return [x[0], Number(x[1])]; }).sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
+  }
+  function dailyFor(date) {
+    var log = state.dailyLog || [], v = null;
+    for (var i = 0; i < log.length; i++) if (log[i][0] <= date) v = log[i][1];
+    if (v == null) v = log.length ? log[0][1] : state.targets.daily;
+    return v;
+  }
+  function clampTargets(t) {
+    var out = {};
+    KEYS.concat(["daily"]).forEach(function (k) { out[k] = Number(t && t[k]) > 0 ? Number(t[k]) : (DEFAULT_TARGETS[k] || 20); });
+    return out;
+  }
+
+  // ---------- rendering ----------
+  // A running session is a list of [start, end] segments; end is null for the open one.
+  function segs() { return state.running ? state.running.segments : []; }
+  function isPaused() { var g = segs(); return g.length > 0 && g[g.length - 1][1] != null; }
+  function elapsedMs(now) { return segs().reduce(function (a, g) { return a + ((g[1] == null ? now : g[1]) - g[0]); }, 0); }
+  function liveMinutes() { return state.running ? Math.max(0, elapsedMs(Date.now()) / 60000) : 0; }
+  // minutes of the running session per local date (segments split at midnight)
+  function liveByDate(now) {
+    var out = {};
+    segs().forEach(function (g) {
+      var from = g[0], end = g[1] == null ? now : g[1];
+      while (from < end) {
+        var d0 = new Date(from), mid = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + 1).getTime();
+        var to = Math.min(end, mid), k = localDate(from);
+        out[k] = (out[k] || 0) + (to - from) / 60000;
+        from = to;
+      }
+    });
+    return out;
+  }
+  function firstStartOn(date) {
+    var best = null;
+    segs().forEach(function (g) {
+      var from = g[0], end = g[1] == null ? Date.now() : g[1];
+      while (from < end) {
+        var d0 = new Date(from), mid = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + 1).getTime();
+        if (localDate(from) === date && (best == null || from < best)) best = from;
+        from = Math.min(end, mid);
+      }
+    });
+    return best;
+  }
+  var FOCUS_MS = 45 * 60000, BREAK_MS = 15 * 60000, GRACE_MS = 60000;
+  var FORGIVE_MS = 60000;   // an early pause shorter than this is forgiven: not a break, and it doesn't split a focus block
+  var KIND = { study: "Study break", early: "Early pause", big: "Big break" };
+  // Full 45-minute blocks = each complete 45 min inside one unbroken study stretch (no pause of any kind).
+  function fullBlocks(segList, now) {
+    var list = (segList || []).slice().sort(function (a, b) { return a[0] - b[0]; }), total = 0, run = 0;
+    for (var i = 0; i < list.length; i++) {
+      var g = list[i], end = g[1] == null ? now : g[1], next = list[i + 1];
+      run += Math.max(0, end - g[0]);
+      var joined = next && g[1] != null && g[2] !== "study" && g[2] !== "big" && next[0] - g[1] < FORGIVE_MS && next[0] >= g[1];
+      if (joined) run += next[0] - g[1];
+      else { total += Math.floor(run / FOCUS_MS); run = 0; }
+    }
+    return total;
+  }
+  // breaks = gaps between segments; the open pause (if paused) is the current break.
+  // segment[2] records what kind of break followed it: "study" (from the prompt, or after 45+ min of focus) or "early".
+  // A gap after a segment is a study break (first 15 min only) or an early pause.
+  // Study-break time past 15 minutes becomes an early pause.
+  // A gap after a segment is a study break (15 min + 1-min grace), an early pause, or a big break (not tracked).
+  // Study-break time past 16 minutes becomes an early pause.
+  function splitGap(from, to, kind, now) {
+    var end = to == null ? now : to, open = to == null, lim = BREAK_MS + GRACE_MS;
+    if (kind === "big") return [{ from: from, to: to, ms: end - from, open: open, kind: "big" }];
+    if (kind !== "study") return [{ from: from, to: to, ms: end - from, open: open, kind: !open && end - from < FORGIVE_MS ? "forgiven" : "early" }];
+    if (end - from <= lim) return [{ from: from, to: to, ms: end - from, open: open, kind: "study", grace: end - from > BREAK_MS }];
+    return [{ from: from, to: from + lim, ms: lim, open: open, kind: "study", grace: true },
+            { from: from + lim, to: to, ms: end - from - lim, open: open, kind: "early", over: true }];
+  }
+  function gapKind(seg) { return seg[2] === "study" || seg[2] === "big" ? seg[2] : "early"; }
+  function gapList(now) {
+    var g = segs(), out = [];
+    for (var i = 0; i < g.length; i++) {
+      if (g[i][1] == null) continue;
+      var resumed = i + 1 < g.length ? g[i + 1][0] : null;
+      out = out.concat(splitGap(g[i][1], resumed, gapKind(g[i]), now));
+    }
+    return out;
+  }
+  // breaks that count (study breaks + early pauses); big breaks are not tracked
+  function breakList(now) { return gapList(now).filter(function (b) { return b.kind !== "big" && b.kind !== "forgiven"; }); }
+  function currentBreak(now) { var l = gapList(now).filter(function (b) { return b.open; }); return l.length ? l : null; }
+  function onBigBreak() { var l = currentBreak(Date.now()); return !!(l && l[l.length - 1].kind === "big"); }
+  // study time since the last study break (or since the session started)
+  function studySinceBreak(now) {
+    var g = segs(), last = -1, t = 0;
+    for (var i = g.length - 1; i >= 0; i--) if ((g[i][2] === "study" || g[i][2] === "big") && g[i][1] != null) { last = i; break; }
+    for (var k = last + 1; k < g.length; k++) t += (g[k][1] == null ? now : g[k][1]) - g[k][0];
+    return { ms: t, anchor: last + 1 < g.length ? g[last + 1][0] : null };
+  }
+  function hhmm(ts) { var d = new Date(ts); return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
+  function shortDur(ms) { var s = Math.max(0, Math.round(ms / 1000)); if (s < 3600) return Math.floor(s / 60) + ":" + pad(s % 60); return Math.floor(s / 3600) + "h " + pad(Math.floor(s / 60) % 60) + "m"; }
+
+  function normRunning(r) {
+    if (!r || !r.subject) return null;
+    var g = Array.isArray(r.segments) ? r.segments.map(function (x) { var o = [Number(x[0]), x[1] == null ? null : Number(x[1])]; if (x[2]) o.push(String(x[2])); return o; })
+          : r.startedAt ? [[Number(r.startedAt), null]] : [];
+    if (!g.length) return null;
+    return { subject: validSubj(r.subject), startedAt: g[0][0], segments: g };
+  }
+  function minutesBy(filter) {
+    var out = zeros();
+    sessions.forEach(function (s) { if (filter(s) && out[s.subject] !== undefined) out[s.subject] += s.minutes; });
+    return out;
+  }
+
+  function renderTimer() {
+    var r = state.running;
+    var subj = r ? r.subject : picked;
+    var act = activeKeys(), box = $("pick");
+    if (act.indexOf(picked) < 0 && !r) { picked = act[0]; subj = picked; }
+    if (box.getAttribute("data-k") !== act.join(",")) {
+      box.setAttribute("data-k", act.join(","));
+      box.innerHTML = act.map(function (k) { return '<button type="button" class="' + k + '" data-subj="' + k + '" aria-pressed="false">' + esc(NAMES[k]) + '</button>'; }).join("");
+      $("subjLine").textContent = joinNames(act.map(function (k) { return NAMES[k]; }));
+    }
+    Array.prototype.forEach.call(box.children, function (b) { var k = b.getAttribute("data-subj"); b.setAttribute("aria-pressed", String(k === subj)); b.disabled = !!r; });
+    var btn = $("startStop");
+    btn.disabled = !store || busy;
+    var pb = $("pauseBtn"), sb = $("sbBtn"), bb = $("bigBtn");
+    pb.hidden = !r; pb.disabled = !store || busy;
+    bb.hidden = !r || onBigBreak(); bb.disabled = !store || busy;
+    $("rules").hidden = !r;
+    sb.hidden = !r || isPaused();
+    if (r && !isPaused()) {
+      var since = studySinceBreak(Date.now()).ms;
+      sb.disabled = !store || busy || since < FOCUS_MS;
+      sb.textContent = since < FOCUS_MS ? "Study break in " + shortDur(FOCUS_MS - since) : "Study break (15 min)";
+    }
+    if (r) {
+      btn.textContent = "Stop";
+      btn.className = "big stop";
+      pb.textContent = isPaused() ? "Resume" : "Pause";
+      $("clock").textContent = clockText(elapsedMs(Date.now()));
+      var st = new Date(r.startedAt);
+      if (isPaused()) {
+        var curL = currentBreak(Date.now()) || [], cur = curL[curL.length - 1];
+        var isStudy = cur && cur.kind === "study", isBig = cur && cur.kind === "big";
+        $("runinfo").innerHTML = '<span class="' + (isBig ? "bigb" : isStudy ? "studyb" : "paused") + '"></span>';
+        $("runinfo").firstChild.textContent = isBig ? "Big break · " + shortDur(cur.ms) + " (since " + hhmm(cur.from) + ", not counted as study or break time)"
+          : isStudy ? (cur.ms <= BREAK_MS ? "Study break · " + shortDur(BREAK_MS - cur.ms) + " left" : "Grace minute · " + shortDur(BREAK_MS + GRACE_MS - cur.ms) + " to resume")
+          : cur && cur.over ? "Study break over · early pause " + shortDur(cur.ms)
+          : cur && cur.ms < FORGIVE_MS ? "Paused · " + shortDur(cur.ms) + " · back within 1 min and it's forgiven"
+          : "Early pause · " + shortDur(cur ? cur.ms : 0);
+        $("runinfo").appendChild(document.createTextNode(" · " + SHORT[r.subject] + ", started " + pad(st.getHours()) + ":" + pad(st.getMinutes())));
+      }
+      var ba = $("backat"), baCur = null;
+      if (isPaused()) { var baL = currentBreak(Date.now()) || []; baCur = baL[baL.length - 1]; }
+      if (baCur && baCur.kind === "study") {
+        ba.hidden = false;
+        var late = baCur.ms > BREAK_MS;
+        ba.className = "backat" + (late ? " late" : "");
+        ba.firstChild.textContent = late ? "Grace minute, back now by " : "Be back at ";
+        $("backatT").textContent = hhmm(baCur.from + (late ? BREAK_MS + GRACE_MS : BREAK_MS));
+      } else ba.hidden = true;
+      if (!isPaused()) {
+        $("runinfo").innerHTML = '<span class="dot" aria-hidden="true"></span>';
+        $("runinfo").appendChild(document.createTextNode(SHORT[r.subject] + " since " + pad(st.getHours()) + ":" + pad(st.getMinutes())));
+      }
+    }
+    renderBreaks();
+    if (!r) {
+      btn.textContent = "Start " + SHORT[picked];
+      btn.className = "big " + picked;
+      $("clock").textContent = "0:00:00";
+      $("runinfo").textContent = "Not running";
+      $("backat").hidden = true;
+    }
+  }
+
+  // Proportional timeline of study, study breaks and early pauses. Big breaks are left out of the graph.
+  function timelineHTML(parts) {
+    parts = parts.filter(function (p) { return !p.big; });
+    var tracked = parts.reduce(function (a, p) { return a + p.ms; }, 0) || 1;
+    return '<div class="tl" role="img" aria-label="Session timeline">' + parts.map(function (p) {
+      return '<span class="' + p.cls + '" style="width:' + (p.ms / tracked * 100) + '%" title="' + p.label + '"></span>';
+    }).join("") + '</div>';
+  }
+  function legendHTML(subj) {
+    return '<div class="legend"><span><span class="sw ' + subj + '"></span>Study</span><span><span class="sw study"></span>Study break</span><span><span class="sw early"></span>Early pause</span></div>';
+  }
+
+  function renderBreaks() {
+    var box = $("breaks"), now = Date.now();
+    box.hidden = !state.running;
+    if (!state.running) { $("brBody").innerHTML = ""; return; }
+    var list = breakList(now), g = segs();
+    var brMs = list.reduce(function (a, b) { return a + b.ms; }, 0), stMs = elapsedMs(now);
+    var sb = list.filter(function (b) { return b.kind === "study"; }), ep = list.filter(function (b) { return b.kind !== "study"; });
+    var sbMs = sb.reduce(function (a, b) { return a + b.ms; }, 0), epMs = ep.reduce(function (a, b) { return a + b.ms; }, 0);
+    var bigs = gapList(now).filter(function (b) { return b.kind === "big"; }), bgMs = bigs.reduce(function (a, b) { return a + b.ms; }, 0);
+    $("brSum").textContent = sb.length + " study · " + ep.length + " early · " + shortDur(brMs) + (bigs.length ? " · " + bigs.length + " big" : "");
+    var subj = state.running.subject, gaps = gapList(now);
+    var parts = [];
+    g.forEach(function (seg) {
+      var e = seg[1] == null ? now : seg[1];
+      if (e - seg[0] > 0) parts.push({ at: seg[0], cls: "st " + subj, ms: e - seg[0], label: "Studied " + hhmm(seg[0]) + "–" + (seg[1] == null ? "now" : hhmm(e)) + " (" + shortDur(e - seg[0]) + ")" });
+    });
+    gaps.forEach(function (b) {
+      if (b.kind === "forgiven") { parts.push({ at: b.from, cls: "st " + subj, ms: b.ms, label: "Pause under 1 min, forgiven " + hhmm(b.from) }); return; }
+      parts.push({ at: b.from, cls: b.kind === "big" ? "bigbr" : "br " + b.kind, big: b.kind === "big", ms: b.ms,
+        label: (b.kind === "big" ? "Big break (not tracked) " : b.over ? "Early pause (study break overrun) " : KIND[b.kind] + (b.grace ? " incl. grace minute " : " ")) + hhmm(b.from) + "–" + (b.to == null ? "now" : hhmm(b.to)) });
+    });
+    parts.sort(function (a, b) { return a.at - b.at; });
+    var tl = '<div>' + timelineHTML(parts) + '<div class="tlaxis"><span>' + hhmm(g[0][0]) + '</span><span>now ' + hhmm(now) + '</span></div>' +
+      legendHTML(subj) + '</div>';
+    var tot = '<div class="tltot"><div><b>' + shortDur(stMs) + '</b><small><span class="sw ' + subj + '"></span>Studied this session</small></div>' +
+      '<div><b>' + shortDur(sbMs) + '</b><small><span class="sw study"></span>' + sb.length + (sb.length === 1 ? " study break" : " study breaks") + '</small></div>' +
+      '<div><b>' + shortDur(epMs) + '</b><small><span class="sw early"></span>' + ep.length + (ep.length === 1 ? " early pause" : " early pauses") + '</small></div>' +
+      '<div><b>' + shortDur(sbMs + epMs) + '</b><small>Total break (study + early)</small></div>' +
+      (function () {
+        var nb = fullBlocks(g, now), lastG = g[g.length - 1], cur = lastG[1] == null ? (now - lastG[0]) % FOCUS_MS : null;
+        return '<div><b>' + nb + '</b><small>Full 45-min ' + (nb === 1 ? "block" : "blocks") + ' without a break' +
+          (cur != null ? ' · current block ' + shortDur(cur) + ' / 45:00' : "") + '</small></div>';
+      })() +
+      (bigs.length ? '<div><b>' + shortDur(bgMs) + '</b><small>' + bigs.length + (bigs.length === 1 ? " big break" : " big breaks") + ' (not in totals or graph)</small></div>' : "") + '</div>';
+    var nForgiven = gaps.filter(function (b) { return b.kind === "forgiven"; }).length;
+    var lst = "", shown = gapList(now).filter(function (b) { return b.kind !== "forgiven"; });
+    if (shown.length) {
+      lst = "<ol>";
+      shown.forEach(function (b, n) {
+        lst += '<li class="' + (b.to == null ? "now" : "") + '"><span class="t">#' + (n + 1) + " · " + hhmm(b.from) + " → " + (b.to == null ? "now" : hhmm(b.to)) +
+          '<span class="bk ' + b.kind + '">' + (b.over ? "Overrun · early" : KIND[b.kind] + (b.grace ? " + grace" : "")) + '</span></span><span class="m">' + shortDur(b.ms) + "</span></li>";
+      });
+      lst += "</ol>";
+    }
+    if (!shown.length) lst = '<div class="tot">No breaks yet. Your study break unlocks after 45 minutes of studying.</div>';
+    if (nForgiven) lst += '<div class="tot">' + nForgiven + (nForgiven === 1 ? " pause" : " pauses") + ' under 1 minute forgiven.</div>';
+    $("brBody").innerHTML = tl + tot + lst;
+  }
+
+  // gaps between timer sessions today (stop → next start), plus the live gap if you're between sessions
+  function betweenSessions(today, now) {
+    var ts = sessions.filter(function (x) { return x.date === today && x.source === "timer" && x.startedAt; })
+      .map(function (x) { return { s: x.startedAt, e: x.endedAt || x.created || x.startedAt + x.minutes * 60000 }; })
+      .sort(function (a, b) { return a.s - b.s; });
+    var total = 0, n = 0;
+    var cut = state.breaksClearedAt || 0;
+    for (var k = 1; k < ts.length; k++) { var gap = ts[k].s - ts[k - 1].e; if (gap > 0 && ts[k - 1].e >= cut) { total += gap; n++; } }
+    var lastEnd = ts.length ? ts[ts.length - 1].e : null, live = 0;
+    if (state.running) {
+      var st = state.running.segments[0][0];
+      if (lastEnd && lastEnd >= cut && st > lastEnd && localDate(st) === today) { total += st - lastEnd; n++; }
+    } else if (lastEnd && localDate(lastEnd) === today && lastEnd >= cut) {
+      live = Math.max(0, now - lastEnd);
+    }
+    return { ms: total, n: n, live: live };
+  }
+
+  function renderStats() {
+    var t = state.targets, today = localDate(Date.now());
+    var live = liveMinutes(), liveSubj = state.running && state.running.subject;
+    var liveToday = state.running ? (liveByDate(Date.now())[today] || 0) : 0;
+
+    var d = minutesBy(function (s) { return s.date === today; });
+    if (liveSubj) d[liveSubj] += liveToday;
+    var dayTotal = sumKeys(d), dayCap = Math.max(t.daily * 60, dayTotal), act = activeKeys();
+    var shownToday = KEYS.filter(function (k) { return act.indexOf(k) >= 0 || d[k] >= 1; });
+    $("todayLbl").textContent = hm(dayTotal) + " studied" + (liveToday ? " (incl. running timer)" : "");
+    $("todayNum").innerHTML = "<b>" + (dayTotal / 60).toFixed(1) + "</b> / " + t.daily + " h";
+    $("todayBar").innerHTML = shownToday.map(function (k) { return '<span class="' + k + '" style="width:' + (d[k] / dayCap * 100) + '%"></span>'; }).join("");
+    var brToday = 0, sbToday = 0, bgToday = 0, fbToday = 0;
+    sessions.forEach(function (s) { if (s.date === today) fbToday += s.fullBlocks || 0; });
+    if (state.running) fbToday += fullBlocks(segs().filter(function (g) { return localDate(g[0]) === today; }), Date.now());
+    sessions.forEach(function (s) { if (s.date === today) { brToday += s.breakMinutes || 0; sbToday += s.studyBreakMinutes || 0; bgToday += s.bigBreakMinutes || 0; } });
+    if (state.running) gapList(Date.now()).forEach(function (b) { if (b.kind === "big" && localDate(b.from) === today) bgToday += b.ms / 60000; });
+    if (state.running) breakList(Date.now()).forEach(function (b) { if (localDate(b.from) === today) { brToday += b.ms / 60000; if (b.kind === "study") sbToday += b.ms / 60000; } });
+    var bs = betweenSessions(today, Date.now());
+    var gapsEl = $("todayGaps");
+    gapsEl.innerHTML = 'Full 45-min blocks <b>' + fbToday + '</b> · <span class="sw study"></span>Study breaks <b>' + hm(sbToday) + '</b> · <span class="sw early"></span>Early pauses <b>' + hm(Math.max(0, brToday - sbToday)) + '</b> · Total breaks <b>' + hm(brToday) + '</b>' +  ' · <span class="sw bigbr"></span>Big breaks since 00:00 <b>' + hm(dayModel(today).big) + '</b>' + (bs.n ? " (incl. " + bs.n + (bs.n === 1 ? " gap" : " gaps") + " between sessions)" : "") +
+      (bs.live >= 60000 ? " · Away since your last session: <b>" + shortDur(bs.live) + "</b>" : "");
+    $("todaySub").textContent = shownToday.map(function (k) { return SHORT[k] + " " + hm(d[k]); }).join(" · ") +
+      (dayTotal >= t.daily * 60 ? " · Daily target reached" : " · " + hm(t.daily * 60 - dayTotal) + " to go");
+
+    var tot = minutesBy(function () { return true; });
+    if (liveSubj) tot[liveSubj] += live;
+    var past = pastKeys();
+    $("totals").innerHTML = act.concat(past).map(function (k, i) {
+      var target = t[k] * 60;
+      var sub = i >= act.length ? "Exam written · " + hm(tot[k]) + " studied (" + Math.round(tot[k] / target * 100) + "% of target)" : tot[k] >= target ? "Target reached (" + Math.round(tot[k] / target * 100) + "%)" : hm(target - tot[k]) + " to go · " + Math.round(tot[k] / target * 100) + "%";
+      var row = '<div class="row' + (i >= act.length ? ' past' : '') + '"><span class="lbl">' + esc(NAMES[k]) + '</span><span class="num"><b>' + (tot[k] / 60).toFixed(1) + '</b> / ' + t[k] + ' h</span>' +
+        '<div class="bar"><span class="' + k + '" style="width:' + Math.min(100, tot[k] / target * 100) + '%"></span></div><span class="sub">' + sub + '</span></div>';
+      return (i === act.length && past.length ? '<h3 class="pasth">Past exams</h3>' : "") + row;
+    }).join("");
+    var sel = $("aSubject");
+    var allK = act.concat(past);
+    if (sel.getAttribute("data-k") !== allK.join(",")) {
+      var keep = sel.value;
+      sel.setAttribute("data-k", allK.join(","));
+      sel.innerHTML = allK.map(function (k) { return '<option value="' + k + '">' + esc(NAMES[k]) + (act.indexOf(k) < 0 ? " (past exam)" : "") + '</option>'; }).join("");
+      sel.value = allK.indexOf(keep) >= 0 ? keep : (act.indexOf(picked) >= 0 ? picked : act[0]);
+    }
+  }
+
+  function renderWeek() {
+    var t = state.targets, wk = $("week"), days = [];
+    var now = new Date();
+    for (var i = 6; i >= 0; i--) { var dt = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i); days.push(dt); }
+    var liveSubj = state.running && state.running.subject, lbd = state.running ? liveByDate(Date.now()) : {};
+    var per = days.map(function (dt) {
+      var key = localDate(dt.getTime());
+      var m = minutesBy(function (s) { return s.date === key; });
+      if (liveSubj && lbd[key]) m[liveSubj] += lbd[key];
+      return { key: key, dt: dt, m: m, tot: sumKeys(m) };
+    });
+    per.forEach(function (p) { p.goal = dailyFor(p.key); });
+    var maxMin = Math.max(Math.max.apply(null, per.map(function (p) { return p.goal; })) * 60 * 1.15, Math.max.apply(null, per.map(function (p) { return p.tot; })));
+    var chartH = 150 - 40; // leave room for labels
+    var today = localDate(Date.now());
+    wk.innerHTML = "";
+    per.forEach(function (p) {
+      var col = document.createElement("div");
+      col.className = "col" + (p.key === today ? " today" : "");
+      var tot = p.tot;
+      var h = document.createElement("div"); h.className = "h"; h.textContent = tot ? (tot / 60).toFixed(1) : "";
+      var stack = document.createElement("div"); stack.className = "stack";
+      stack.style.height = Math.max(2, tot / maxMin * chartH) + "px";
+      stack.title = p.key + ": " + (KEYS.filter(function (k) { return p.m[k] >= 1; }).map(function (k) { return SHORT[k] + " " + hm(p.m[k]); }).join(", ") || "nothing logged");
+      KEYS.map(function (k) { return [k, p.m[k]]; }).forEach(function (x) {
+        if (!x[1]) return; var s = document.createElement("span"); s.className = x[0]; s.style.height = (x[1] / tot * 100) + "%"; stack.appendChild(s);
+      });
+      var d = document.createElement("div"); d.className = "d";
+      d.textContent = p.key === today ? "Today" : p.dt.toLocaleDateString(undefined, { weekday: "short" });
+      col.appendChild(h); col.appendChild(stack); col.appendChild(d);
+      if (p.goal !== t.daily && p.tot > 0) {
+        var mk = document.createElement("div"); mk.className = "tmark";
+        mk.style.bottom = (18 + 4 + p.goal * 60 / maxMin * chartH) + "px";
+        mk.title = "Goal that day: " + p.goal + " h";
+        col.appendChild(mk);
+      }
+      wk.appendChild(col);
+    });
+    var old = wk.parentNode.querySelector(".targetline"); if (old) old.remove();
+    var line = document.createElement("div"); line.className = "targetline";
+    // stack bottoms sit above the 18px day label; height maps minutes to chartH
+    line.style.bottom = (18 + 4 + t.daily * 60 / maxMin * chartH) + "px";
+    line.innerHTML = "<em>" + t.daily + " h</em>";
+    wk.parentNode.appendChild(line);
+    var act = activeKeys(), inWeek = KEYS.filter(function (k) { return act.indexOf(k) >= 0 || per.some(function (p) { return p.m[k] >= 1; }); });
+    $("weekLegend").innerHTML = inWeek.map(function (k) { return '<span><span class="sw ' + k + '"></span>' + esc(SHORT[k]) + '</span>'; }).join("") + "<span>Dashed line: daily target</span>";
+  }
+
+  // Day-by-day plans, one per exam period.
+  // FP + PDEs: Day 1 = Fri 9 Oct 2026. ML + Networks: Day 1 = Mon 19 Oct 2026, 3.5 h of each a day for 10 days = 35 h each before the 29th.
+  var PLANS = [
+    { start: "2026-10-09", days: [{ fp: 5, pde: 3 }, { fp: 4.5, pde: 3.5 }, { fp: 4, pde: 4 }, { fp: 4, pde: 4 }, { fp: 5, pde: 3 }, { fp: 6, pde: 2 }, { fp: 0, pde: 4.5 }] },
+    { start: "2026-10-19", days: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(function () { return { ml: 3.5, cn: 3.5 }; }) }
+  ];
+  var PLAN_START = PLANS[0].start, PLAN = PLANS[0].days;
+  function planFor(date) {
+    var b = new Date(date + "T12:00:00");
+    for (var i = 0; i < PLANS.length; i++) {
+      var idx = Math.round((b - new Date(PLANS[i].start + "T12:00:00")) / 86400000);
+      if (idx >= 0 && idx < PLANS[i].days.length) return { day: idx + 1, p: PLANS[i].days[idx] };
+    }
+    return null;
+  }
+  function planText(p) { return KEYS.filter(function (k) { return p[k] > 0; }).map(function (k) { return SHORT[k] + " " + p[k] + " h"; }).join(" + "); }
+
+  function sessionShape(s) {
+    var segsS = (s.segments && s.segments.length) ? s.segments.slice().sort(function (a, b) { return a[0] - b[0]; }) : null;
+    var start = s.startedAt || (segsS ? segsS[0][0] : null);
+    var end = s.endedAt || (segsS ? segsS[segsS.length - 1][1] : (s.startedAt ? s.startedAt + (s.minutes + (s.breakMinutes || 0)) * 60000 : null));
+    var longest = segsS ? Math.max.apply(null, segsS.map(function (x) { return (x[1] - x[0]) / 60000; })) : (s.breaks ? null : s.minutes);
+    return { segs: segsS, start: start, end: end, longest: longest };
+  }
+
+  function insightsFor(s, shape) {
+    var out = [], m = s.minutes, br = s.breakMinutes || 0, nb = s.breaks || 0;
+    if (s.source === "manual") {
+      out.push(["note", "Added manually, so there's no timing detail. Use the timer to get focus and break insights."]);
+    } else {
+      if (m < 20) out.push(["note", "Short session (" + hm(m) + "). Fine for flashcards or a quick review. For practice questions and coding, aim for 50–90 minute blocks."]);
+      else if (m < 50) out.push(["good", "Solid focused block of " + hm(m) + ". Stretching to 50–90 minutes gives time to work a full problem or drill."]);
+      else if (m <= 100) out.push(["good", "Ideal deep-work length (" + hm(m) + "). Long enough to get properly into the material."]);
+      else out.push(["tip", "Long session (" + hm(m) + "). Focus usually fades after about 90 minutes. Splitting it into blocks with short breaks keeps recall sharper."]);
+      if (shape.longest != null && shape.longest > 90) out.push(["tip", "Your longest stretch without a break was " + hm(shape.longest) + ". Try a 5–10 minute pause around every hour."]);
+      if (nb > 0) {
+        var ratio = br / (m + br);
+        if (ratio > 0.4) out.push(["tip", "Breaks took " + Math.round(ratio * 100) + "% of this session (" + hm(br) + "). The 45/15 rhythm is 25%; try to come back when your 15 minutes are up."]);
+        else if (ratio > 0.3) out.push(["note", "Breaks were " + Math.round(ratio * 100) + "% of the session, a little above the 25% of a 45-minutes-on, 15-minutes-off rhythm."]);
+        else if (ratio >= 0.05) out.push(["good", "Healthy balance: breaks were " + Math.round(ratio * 100) + "% of the session (the 45/15 rhythm is 25%)."]);
+        if (nb / Math.max(1, m / 60) > 3) out.push(["tip", nb + " breaks in " + hm(m) + " is a lot of interruptions. Put your phone in another room for the next block."]);
+        var sbn = s.studyBreaks || 0, epn = Math.max(0, nb - sbn);
+        if (sbn) out.push(["good", sbn + (sbn === 1 ? " study break" : " study breaks") + " taken on the 45-minutes-on, 15-minutes-off rhythm."]);
+        var overrun = (s.breakTimes || []).filter(function (b) { return b[2] === "early" && (s.breakTimes || []).some(function (c) { return c[2] === "study" && c[1] === b[0]; }); });
+        if (overrun.length) out.push(["tip", "Your study break ran over by " + hm(overrun.reduce(function (a, b) { return a + (b[1] - b[0]) / 60000; }, 0)) + ". Set an alarm for 15 minutes when you step away."]);
+        if (epn >= 2) out.push(["tip", epn + " early pauses outside your study breaks. Try to hold on to the 45-minute mark; the first 20 minutes are when focus builds."]);
+        else if (epn === 1) out.push(["note", "1 early pause. That's fine occasionally; just don't let it become a habit."]);
+      }
+      if (shape.start) {
+        var h = new Date(shape.start).getHours();
+        if (h < 5) out.push(["note", "Late-night session. That works if you still get about 7 hours of sleep afterwards; sleep is when the day's studying gets stored."]);
+      }
+      var timed = sessions.filter(function (x) { return x.source === "timer" && x.subject === s.subject; });
+      if (timed.length >= 3) {
+        var avg = timed.reduce(function (a, x) { return a + x.minutes; }, 0) / timed.length;
+        if (Math.abs(m - avg) >= 15) out.push(["note", "Your average " + SHORT[s.subject] + " session is " + hm(avg) + "; this one was " + (m > avg ? "longer" : "shorter") + "."]);
+      }
+    }
+    var plan = planFor(s.date);
+    if (plan) {
+      var target = plan.p[s.subject] || 0;
+      var done = sessions.filter(function (x) { return x.date === s.date && x.subject === s.subject; }).reduce(function (a, x) { return a + x.minutes; }, 0);
+      if (target > 0) out.push([done >= target * 60 ? "good" : "note", "Day " + plan.day + " plan: " + target + " h of " + SHORT[s.subject] + ". You logged " + hm(done) + " that day (" + Math.round(done / (target * 60) * 100) + "%)."]);
+      else if (planText(plan.p)) out.push(["note", "Day " + plan.day + " plan didn't include " + SHORT[s.subject] + " (" + planText(plan.p) + ")."]);
+    }
+    if (SUBJ[s.subject]) out.push(["tip", SUBJ[s.subject].tip + " Recall locks it in better than re-reading."]);
+    return out;
+  }
+
+  // ---------- one day = one session: everything from 00:00 to midnight (or now, for today) ----------
+  function dayBounds(date) {
+    var d0 = new Date(date + "T00:00:00"), start = d0.getTime();
+    var end = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + 1).getTime();
+    return { start: start, end: end };
+  }
+  function dayModel(date, now) {
+    now = now || Date.now();
+    var b = dayBounds(date), viewEnd = Math.min(b.end, now);
+    var iv = [], pieces = [], manual = zeros(), nManual = 0;
+    function clipPush(from, to, type, extra) {
+      var f = Math.max(from, b.start), t = Math.min(to, viewEnd);
+      if (t > f) iv.push(Object.assign({ s: f, e: t, type: type }, extra || {}));
+    }
+    sessions.forEach(function (x) {
+      if (x.date !== date || !SUBJ.hasOwnProperty(x.subject)) return;
+      if (x.source === "manual" || !x.segments || !x.segments.length) { manual[x.subject] += x.minutes; nManual++; pieces.push({ s: x, manual: true }); return; }
+      pieces.push({ s: x });
+      var g = x.segments.slice().sort(function (a, c) { return a[0] - c[0]; }), prevEnd = null, prevKind = "early";
+      g.forEach(function (seg) {
+        if (prevEnd != null && seg[0] > prevEnd) splitGap(prevEnd, seg[0], prevKind, seg[0]).forEach(function (q) {
+          if (q.kind !== "big") clipPush(q.from, q.to, q.kind === "forgiven" ? x.subject : q.kind, { over: q.over });
+        });
+        if (seg[1] > seg[0]) clipPush(seg[0], seg[1], x.subject);
+        prevEnd = seg[1]; prevKind = gapKind(seg);
+      });
+    });
+    var running = false;
+    if (state.running) {
+      var subj = state.running.subject;
+      segs().forEach(function (seg) { clipPush(seg[0], seg[1] == null ? now : seg[1], subj, { live: seg[1] == null }); });
+      gapList(now).forEach(function (q) { if (q.kind !== "big") clipPush(q.from, q.to == null ? now : q.to, q.kind === "forgiven" ? subj : q.kind, { over: q.over, live: q.to == null }); });
+      running = iv.some(function (q) { return q.live; }) || segs().some(function (seg) { return (seg[1] == null ? now : seg[1]) > b.start && seg[0] < viewEnd; });
+    }
+    iv.sort(function (a, c) { return a.s - c.s; });
+    // everything not covered (before the first Start, between Stop and Start, inside big breaks, after the last Stop) is a big break
+    var parts = [], cur = b.start;
+    iv.forEach(function (q) {
+      if (q.s > cur) parts.push({ s: cur, e: q.s, type: "big" });
+      if (q.e > cur) {
+        var lastP = parts[parts.length - 1], qs = Math.max(q.s, cur);
+        if (lastP && lastP.type === q.type && lastP.e === qs && SUBJ.hasOwnProperty(q.type)) { lastP.e = q.e; if (q.live) lastP.live = true; }
+        else parts.push(Object.assign({}, q, { s: qs }));
+        cur = q.e;
+      }
+    });
+    if (viewEnd > cur) parts.push({ s: cur, e: viewEnd, type: "big" });
+    var m = { date: date, start: b.start, end: b.end, viewEnd: viewEnd, isToday: viewEnd < b.end, parts: parts, pieces: pieces, nManual: nManual, manual: manual,
+      study: 0, early: 0, big: 0, nStudy: 0, nEarly: 0, blocks: 0, longest: 0, first: null, last: null, running: running,
+      crossIn: false, crossOut: false };
+    KEYS.forEach(function (k) { m[k] = manual[k]; });
+    parts.forEach(function (q) {
+      var mins = (q.e - q.s) / 60000;
+      if (SUBJ.hasOwnProperty(q.type)) {
+        m[q.type] += mins; m.blocks += Math.floor((q.e - q.s) / FOCUS_MS); m.longest = Math.max(m.longest, mins);
+        if (m.first == null) m.first = q.s; m.last = q.e;
+        if (q.s === b.start) m.crossIn = true;
+        if (q.e === b.end) m.crossOut = true;
+      } else if (q.type === "study") { m.study += mins; m.nStudy++; }
+      else if (q.type === "early") { m.early += mins; m.nEarly++; }
+      else m.big += mins;
+    });
+    // manual minutes take time out of the day too
+    m.big = Math.max(0, m.big - sumKeys(manual));
+    m.timed = pieces.filter(function (p) { return !p.manual; }).length + (running ? 1 : 0);
+    m.studied = sumKeys(m);
+    return m;
+  }
+  function dayBreakdown(date) { return dayModel(date); }
+  function dayPieHTML(date) {
+    var b = dayBreakdown(date);
+    var slices = [].concat(KEYS.map(function (k) { return { k: NAMES[k], v: b[k], c: "var(--" + k + ")" }; })).concat([
+      { k: "Study breaks", v: b.study, c: "var(--good)" },
+      { k: "Early pauses", v: b.early, c: "var(--warn)" },
+      { k: "Big breaks (incl. before, between and after sessions)", v: b.big, c: "var(--muted)" }
+    ]).filter(function (x) { return x.v >= 0.5; });
+    var total = slices.reduce(function (a, x) { return a + x.v; }, 0);
+    if (!total) return "";
+    var cx = 75, cy = 75, R = 66, r = 42, a0 = -Math.PI / 2, paths = "";
+    function pt(rad, ang) { return (cx + rad * Math.cos(ang)).toFixed(2) + " " + (cy + rad * Math.sin(ang)).toFixed(2); }
+    slices.forEach(function (x) {
+      var frac = x.v / total, a1 = a0 + frac * 2 * Math.PI;
+      var title = "<title>" + x.k + ": " + hm(x.v) + " (" + Math.round(frac * 100) + "%)</title>";
+      if (frac >= 0.9999) {
+        paths += '<circle cx="' + cx + '" cy="' + cy + '" r="' + ((R + r) / 2) + '" style="fill:none;stroke:' + x.c + ';stroke-width:' + (R - r) + '">' + title + '</circle>';
+      } else {
+        var large = frac > 0.5 ? 1 : 0;
+        paths += '<path d="M ' + pt(R, a0) + ' A ' + R + ' ' + R + ' 0 ' + large + ' 1 ' + pt(R, a1) + ' L ' + pt(r, a1) + ' A ' + r + ' ' + r + ' 0 ' + large + ' 0 ' + pt(r, a0) + ' Z" style="fill:' + x.c + ';stroke:var(--surface);stroke-width:1.5">' + title + '</path>';
+      }
+      a0 = a1;
+    });
+    var studied = b.studied;
+    var svg = '<svg viewBox="0 0 150 150" role="img" aria-label="How the day was spent: ' + slices.map(function (x) { return x.k + " " + hm(x.v); }).join(", ") + '">' + paths +
+      '<text x="75" y="74" text-anchor="middle" class="ctr1">' + hm(studied) + '</text><text x="75" y="90" text-anchor="middle" class="ctr2">STUDIED</text></svg>';
+    var legend = "<ul>" + slices.map(function (x) {
+      return '<li><span class="dot2" style="background:' + x.c + '"></span><span>' + x.k + '</span><span class="v"><b>' + hm(x.v) + '</b> · ' + Math.round(x.v / total * 100) + '%</span></li>';
+    }).join("") + "</ul>";
+    return '<div class="daypie">' + svg + legend + '</div>';
+  }
+
+  // ---------- day review: was it a good day? ----------
+  function dayReview(date) {
+    var b = dayBreakdown(date), studied = b.studied, t = state.targets, plan = planFor(date);
+    if (studied < 1) return null;
+    var blocks = b.blocks;
+    var goal = dailyFor(date), target = goal * 60;
+    // four parts, 100 points
+    var pHours = Math.min(1, studied / target);
+    var pPlan = 1, planBits = [];
+    if (plan) {
+      var parts = KEYS.filter(function (k) { return plan.p[k] > 0; });
+      pPlan = parts.length ? parts.reduce(function (a, k) { return a + Math.min(1, b[k] / (plan.p[k] * 60)); }, 0) / parts.length : 1;
+      planBits = parts.map(function (k) { return { k: k, done: b[k], want: plan.p[k] * 60 }; });
+    }
+    var pFocus = studied > 0 ? Math.min(1, (blocks * 45) / studied / 0.6) : 0;   // 60%+ of study inside full blocks = full marks
+    var earlyRatio = studied > 0 ? b.early / studied : 0;
+    var pBreaks = earlyRatio <= 0.05 ? 1 : earlyRatio <= 0.1 ? 0.75 : earlyRatio <= 0.2 ? 0.45 : 0.2;
+    var score = Math.round(pHours * 40 + pPlan * 20 + pFocus * 20 + pBreaks * 20);
+    var grade = score >= 85 ? ["Excellent day", "g4"] : score >= 70 ? ["Good day", "g3"] : score >= 50 ? ["Fair day", "g2"] : ["Below target", "g1"];
+    var pts = [];
+    pts.push([studied >= target ? "good" : studied >= target * 0.7 ? "note" : "tip",
+      "Studied " + hm(studied) + " of your " + goal + " h target (" + Math.round(studied / target * 100) + "%)."]);
+    planBits.forEach(function (x) {
+      var pc = Math.round(x.done / x.want * 100);
+      pts.push([pc >= 100 ? "good" : pc >= 60 ? "note" : "tip",
+        (plan ? "Day " + plan.day + " plan: " : "") + hm(x.want) + " of " + NAMES[x.k] + ", you did " + hm(x.done) + " (" + pc + "%)." + (x.done < 1 ? " Make it the first thing you do tomorrow." : "")]);
+    });
+    pts.push([pFocus >= 0.8 ? "good" : "tip", blocks + (blocks === 1 ? " full 45-minute block" : " full 45-minute blocks") + " (" + hm(blocks * 45) + " of deep focus)." +
+      (pFocus < 0.8 ? " A lot of your study came in short stretches. Aim to protect whole 45-minute blocks." : "")]);
+    if (studied > 0) pts.push([earlyRatio <= 0.05 ? "good" : earlyRatio <= 0.1 ? "note" : "tip",
+      "Early pauses: " + hm(b.early) + " (" + Math.round(earlyRatio * 100) + "% of study time). Study breaks: " + hm(b.study) + "."]);
+    if (b.big >= 1) pts.push(["note", "Big breaks: " + hm(b.big) + " (sleep, life, and the time before, between and after your sessions). Not counted against you."]);
+    var next = planFor(addDays(date, 1));
+    if (next && planText(next.p)) pts.push(["note", "Next: Day " + next.day + " plan is " + planText(next.p) + "."]);
+    return { score: score, grade: grade, pts: pts, parts: [["Hours", pHours], ["Plan", pPlan], ["Focus", pFocus], ["Breaks", pBreaks]] };
+  }
+  function dayReviewHTML(date) {
+    var r = dayReview(date); if (!r) return "";
+    return '<div class="review"><div class="top"><span class="score">' + r.score + '<small> / 100</small></span><span class="grade ' + r.grade[1] + '">' + r.grade[0] + '</span></div>' +
+      '<div class="bars">' + r.parts.map(function (p) { return '<div>' + p[0] + ' ' + Math.round(p[1] * 100) + '%<i><b style="width:' + Math.round(p[1] * 100) + '%"></b></i></div>'; }).join("") + '</div>' +
+      '<ul class="ins">' + r.pts.map(function (p) {
+        return '<li><span class="k ' + p[0] + '">' + (p[0] === "good" ? "Good" : p[0] === "tip" ? "Work on" : "Note") + '</span><span>' + esc(p[1]) + '</span></li>';
+      }).join("") + '</ul></div>';
+  }
+
+  function dayTimelineHTML(m) {
+    var span = m.end - m.start;
+    var cls = { study: "br study", early: "br early", big: "bigbr" };
+    var name = { study: "Study break", early: "Early pause", big: "Big break (not counted)" };
+    KEYS.forEach(function (k) { cls[k] = "st " + k; name[k] = NAMES[k]; });
+    var html = '<div class="tl daytl" role="img" aria-label="Your day from 00:00 to midnight">' + m.parts.map(function (q) {
+      return '<span class="' + cls[q.type] + '" style="width:' + ((q.e - q.s) / span * 100) + '%" title="' + name[q.type] + (q.over ? " (study break overrun)" : "") + " " + hhmm(q.s) + "–" + (q.e === m.end ? "24:00" : hhmm(q.e)) + " · " + hm((q.e - q.s) / 60000) + '"></span>';
+    }).join("") + (m.viewEnd < m.end ? '<span class="rest" style="width:' + ((m.end - m.viewEnd) / span * 100) + '%" title="Rest of today"></span>' : "") + '</div>';
+    html += '<div class="tlaxis"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>';
+    html += '<div class="legend">' + KEYS.filter(function (k) { return m[k] > 0; }).map(function (k) { return '<span><span class="sw ' + k + '"></span>' + SHORT[k] + '</span>'; }).join("") + '<span><span class="sw study"></span>Study break</span><span><span class="sw early"></span>Early pause</span><span><span class="sw bigbr"></span>Big break</span></div>';
+    return html;
+  }
+
+  function dayInsights(m) {
+    var out = [], st = m.studied, br = m.study + m.early;
+    if (st < 1) { out.push(["note", "Nothing timed this day yet."]); return out; }
+    if (m.longest > 90) out.push(["tip", "Your longest stretch without a break was " + hm(m.longest) + ". Focus usually fades after about 90 minutes; pause around every hour."]);
+    else if (m.longest >= 45) out.push(["good", "Longest focus stretch: " + hm(m.longest) + ". That's a proper deep-work block."]);
+    if (br > 0) {
+      var ratio = br / (st + br);
+      if (ratio > 0.4) out.push(["tip", "Breaks took " + Math.round(ratio * 100) + "% of your working time (" + hm(br) + "). The 45/15 rhythm is 25%; come back when your 15 minutes are up."]);
+      else if (ratio > 0.3) out.push(["note", "Breaks were " + Math.round(ratio * 100) + "% of your working time, a little above the 25% of the 45/15 rhythm."]);
+      else if (ratio >= 0.05) out.push(["good", "Healthy balance: breaks were " + Math.round(ratio * 100) + "% of your working time (the 45/15 rhythm is 25%)."]);
+    }
+    if (m.nStudy) out.push(["good", m.nStudy + (m.nStudy === 1 ? " study break" : " study breaks") + " on the 45-minutes-on, 15-minutes-off rhythm."]);
+    var over = m.parts.filter(function (q) { return q.over; });
+    if (over.length) out.push(["tip", "Study breaks ran over by " + hm(over.reduce(function (a, q) { return a + (q.e - q.s) / 60000; }, 0)) + " in total. Set an alarm for 15 minutes when you step away."]);
+    var ep = m.nEarly - over.length;
+    if (ep >= 2) out.push(["tip", ep + " early pauses outside your study breaks. Try to hold on to the 45-minute mark."]);
+    else if (ep === 1) out.push(["note", "1 early pause. Fine occasionally; just don't let it become a habit."]);
+    if (m.timed > 1) out.push(["note", m.timed + " timer sessions this day. The time between a Stop and the next Start counts as a big break."]);
+    if (m.first != null && new Date(m.first).getHours() < 5 && !m.crossIn) out.push(["note", "Late-night start. That works if you still get about 7 hours of sleep; sleep is when the day's studying gets stored."]);
+    KEYS.forEach(function (k) { if (m[k] >= 1) out.push(["tip", SUBJ[k].tip]); });
+    return out;
+  }
+
+  function insList(list, tipWord) {
+    var ul = document.createElement("ul"); ul.className = "ins";
+    list.forEach(function (it) {
+      var li = document.createElement("li"); var k = document.createElement("span"); k.className = "k " + it[0];
+      k.textContent = it[0] === "good" ? "Good" : it[0] === "tip" ? (tipWord || "Tip") : "Note";
+      var t = document.createElement("span"); t.textContent = it[1]; li.appendChild(k); li.appendChild(t); ul.appendChild(li);
+    });
+    return ul;
+  }
+
+  // one timer/manual session inside a day: its time range, notes and delete
+  function sessionRow(s) {
+    var shape = sessionShape(s), b = dayBounds(s.date);
+    var det = document.createElement("details"); det.className = "subsess";
+    var sm = document.createElement("summary");
+    var range = s.source === "manual" ? "Added manually" :
+      (shape.start ? (shape.start <= b.start ? "00:00 (from previous day)" : hhmm(shape.start)) + " → " + (shape.end && shape.end >= b.end ? "24:00 (continues next day)" : shape.end ? hhmm(shape.end) : "?") : "Timer");
+    sm.innerHTML = '<span class="tag ' + s.subject + '">' + SHORT[s.subject] + '</span><span class="when"></span><span class="dur">' + hm(s.minutes) + '</span>';
+    sm.querySelector(".when").textContent = range + (s.breaks ? " · " + s.breaks + (s.breaks === 1 ? " break" : " breaks") : "") + (s.notes ? " · has notes" : "");
+    det.appendChild(sm);
+    var notes = document.createElement("div"); notes.className = "notes";
+    var nl = document.createElement("label"); nl.className = "f"; nl.textContent = "Notes: what did you cover? What felt shaky?";
+    var ta = document.createElement("textarea"); ta.id = "notes-" + s.id; nl.htmlFor = ta.id; ta.value = s.notes || ""; ta.maxLength = 2000;
+    var row = document.createElement("div"); row.className = "row2";
+    var save = document.createElement("button"); save.type = "button"; save.className = "btn ghost"; save.textContent = "Save notes";
+    var msg = document.createElement("span"); msg.className = "saved";
+    var del = document.createElement("button"); del.type = "button"; del.className = "del"; del.textContent = "Delete this session";
+    save.addEventListener("click", function () {
+      save.disabled = true; msg.textContent = "Saving…";
+      store.updateSession(s.id, { notes: ta.value.slice(0, 2000) }).then(function () { msg.textContent = "Saved."; }, function () { msg.textContent = "Couldn't save. Try again."; }).then(function () { save.disabled = false; });
+    });
+    var armed = false, timer = null;
+    del.addEventListener("click", function () {
+      if (!armed) { armed = true; del.textContent = "Confirm delete"; del.classList.add("confirm"); timer = setTimeout(function () { armed = false; del.textContent = "Delete this session"; del.classList.remove("confirm"); }, 3000); return; }
+      clearTimeout(timer); del.disabled = true;
+      store.deleteSession(s.id).catch(function () { status("Couldn't delete that session. Try again."); del.disabled = false; });
+    });
+    notes.appendChild(nl); notes.appendChild(ta);
+    var left = document.createElement("div"); left.style.display = "flex"; left.style.gap = "10px"; left.style.alignItems = "center";
+    left.appendChild(save); left.appendChild(msg);
+    row.appendChild(left); row.appendChild(del); notes.appendChild(row);
+    det.appendChild(notes);
+    if (openIds["s:" + s.id]) det.open = true;
+    det.addEventListener("toggle", function () { if (det.open) openIds["s:" + s.id] = 1; else delete openIds["s:" + s.id]; });
+    return det;
+  }
+
+  function dayDetail(date) {
+    var m = dayModel(date), body = document.createElement("div"); body.className = "sbody";
+    var facts = [
+      ["Studied", hm(m.studied)],
+      [KEYS.filter(function (k) { return m[k] > 0; }).map(function (k) { return SHORT[k]; }).join(" · ") || "By subject", KEYS.filter(function (k) { return m[k] > 0; }).map(function (k) { return hm(m[k]); }).join(" · ") || "—"],
+      ["First start → last stop", m.first != null ? (m.crossIn ? "00:00" : hhmm(m.first)) + " → " + (m.running && m.isToday ? "now" : m.crossOut ? "24:00" : hhmm(m.last)) : "—"],
+      ["Study breaks", m.nStudy + " · " + hm(m.study)],
+      ["Early pauses", m.nEarly + " · " + hm(m.early)],
+      ["Full 45-min blocks", String(m.blocks)],
+      ["Big breaks", hm(m.big)],
+      ["Longest focus", m.longest ? hm(m.longest) : "—"]
+    ];
+    var dl = document.createElement("dl"); dl.className = "facts";
+    facts.forEach(function (f) { var d = document.createElement("div"); var dt = document.createElement("dt"); dt.textContent = f[0]; var dd = document.createElement("dd"); dd.textContent = f[1]; d.appendChild(dt); d.appendChild(dd); dl.appendChild(d); });
+    body.appendChild(dl);
+    var flags = [];
+    if (m.crossIn) flags.push("A session carried over from the previous day, so this day starts at 00:00.");
+    if (m.crossOut) flags.push("A session ran past midnight and continues on the next day.");
+    if (m.running && m.isToday) flags.push("Includes the timer that's running now.");
+    if (m.nManual) flags.push(hm(sumKeys(m.manual)) + " added manually is counted in the totals but isn't on the timeline.");
+    flags.forEach(function (t) { var p = document.createElement("p"); p.className = "dayflag"; p.textContent = t; body.appendChild(p); });
+    var tw = document.createElement("div"); tw.innerHTML = dayTimelineHTML(m); body.appendChild(tw);
+    var rv = dayReviewHTML(date);
+    if (rv) {
+      var rh = document.createElement("h4"); rh.textContent = "Day review · was it a good day?"; body.appendChild(rh);
+      var rw = document.createElement("div"); rw.innerHTML = rv; body.appendChild(rw);
+    }
+    var pie = dayPieHTML(date);
+    if (pie) {
+      var ph = document.createElement("h4"); ph.textContent = "How your day went · 00:00 → " + (m.isToday ? "now" : "midnight"); body.appendChild(ph);
+      var pw = document.createElement("div"); pw.innerHTML = pie; body.appendChild(pw);
+    }
+    var h = document.createElement("h4"); h.textContent = "Insights and tips"; body.appendChild(h);
+    body.appendChild(insList(dayInsights(m)));
+    if (m.pieces.length) {
+      var sh = document.createElement("h4"); sh.textContent = "Sessions this day · notes"; body.appendChild(sh);
+      var wrap = document.createElement("div"); wrap.className = "subsessions";
+      m.pieces.slice().sort(function (a, c) { return (a.s.startedAt || a.s.created || 0) - (c.s.startedAt || c.s.created || 0); })
+        .forEach(function (p) { wrap.appendChild(sessionRow(p.s)); });
+      body.appendChild(wrap);
+    }
+    if (m.running && state.running) {
+      var rn = document.createElement("p"); rn.className = "dayflag";
+      rn.textContent = "Running now: " + NAMES[state.running.subject] + " since " + hhmm(state.running.startedAt) + ". It's saved as a session when you press Stop.";
+      body.appendChild(rn);
+    }
+    return body;
+  }
+
+  function sessionDetail(s) {
+    var shape = sessionShape(s), body = document.createElement("div"); body.className = "sbody";
+    var facts = [
+      ["Studied", hm(s.minutes)],
+      ["Start → end", shape.start ? hhmm(shape.start) + " → " + (shape.end ? hhmm(shape.end) : "?") : "—"],
+      ["Study breaks", (s.studyBreaks || 0) + " · " + hm(s.studyBreakMinutes || 0)],
+      ["Early pauses", Math.max(0, (s.breaks || 0) - (s.studyBreaks || 0)) + " · " + hm(Math.max(0, (s.breakMinutes || 0) - (s.studyBreakMinutes || 0)))],
+      ["Full 45-min blocks", String(s.fullBlocks || 0)],
+      ["Total break", (s.breaks || 0) + " · " + hm(s.breakMinutes || 0)],
+      ["Big breaks", (s.bigBreaks || 0) + " · " + hm(s.bigBreakMinutes || 0)],
+      ["Longest focus", shape.longest != null ? hm(shape.longest) : "—"]
+    ];
+    var dl = document.createElement("dl"); dl.className = "facts";
+    facts.forEach(function (f) { var d = document.createElement("div"); var dt = document.createElement("dt"); dt.textContent = f[0]; var dd = document.createElement("dd"); dd.textContent = f[1]; d.appendChild(dt); d.appendChild(dd); dl.appendChild(d); });
+    body.appendChild(dl);
+    if (shape.segs && shape.start && shape.end && shape.end > shape.start) {
+      var parts = [], prevEnd = null, prevKind = "early";
+      shape.segs.forEach(function (x) {
+        if (prevEnd != null && x[0] > prevEnd) splitGap(prevEnd, x[0], prevKind, x[0]).forEach(function (b) {
+          if (b.kind === "forgiven") { parts.push({ cls: "st " + s.subject, ms: b.ms, label: "Pause under 1 min, forgiven" }); return; }
+          parts.push({ cls: b.kind === "big" ? "bigbr" : "br " + b.kind, big: b.kind === "big", ms: b.ms,
+            label: (b.kind === "big" ? "Big break (not tracked) " : b.over ? "Early pause (study break overrun) " : KIND[b.kind] + " ") + hhmm(b.from) + "–" + hhmm(b.to) });
+        });
+        if (x[1] - x[0] > 0) parts.push({ cls: "st " + s.subject, ms: x[1] - x[0], label: "Studied " + hhmm(x[0]) + "–" + hhmm(x[1]) });
+        prevEnd = x[1];
+        prevKind = gapKind(x);
+      });
+      var tl = timelineHTML(parts) + '<div class="tlaxis"><span>' + hhmm(shape.start) + '</span><span>' + hhmm(shape.end) + '</span></div>' +
+        legendHTML(s.subject);
+      var w = document.createElement("div"); w.innerHTML = tl; body.appendChild(w);
+    }
+    var rv = dayReviewHTML(s.date);
+    if (rv) {
+      var rh = document.createElement("h4");
+      rh.textContent = "Day review · was it a good day?";
+      body.appendChild(rh);
+      var rw = document.createElement("div"); rw.innerHTML = rv; body.appendChild(rw);
+    }
+    var pie = dayPieHTML(s.date);
+    if (pie) {
+      var ph = document.createElement("h4");
+      var pd = new Date(s.date + "T12:00:00");
+      ph.textContent = "How your day went · " + pd.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) + " (all sessions)";
+      body.appendChild(ph);
+      var pw = document.createElement("div"); pw.innerHTML = pie; body.appendChild(pw);
+      if (state.running && s.date === localDate(Date.now())) {
+        var pn = document.createElement("p"); pn.className = "formmsg"; pn.style.margin = "0";
+        pn.textContent = "The session that's running now isn't included until you stop it.";
+        body.appendChild(pn);
+      }
+    }
+    var h = document.createElement("h4"); h.textContent = "Insights and tips"; body.appendChild(h);
+    var ul = document.createElement("ul"); ul.className = "ins";
+    insightsFor(s, shape).forEach(function (it) {
+      var li = document.createElement("li"); var k = document.createElement("span"); k.className = "k " + it[0];
+      k.textContent = it[0] === "good" ? "Good" : it[0] === "tip" ? "Tip" : "Note";
+      var t = document.createElement("span"); t.textContent = it[1]; li.appendChild(k); li.appendChild(t); ul.appendChild(li);
+    });
+    body.appendChild(ul);
+    var notes = document.createElement("div"); notes.className = "notes";
+    var nl = document.createElement("label"); nl.className = "f"; nl.textContent = "Notes: what did you cover? What felt shaky?";
+    var ta = document.createElement("textarea"); ta.id = "notes-" + s.id; nl.htmlFor = ta.id; ta.value = s.notes || ""; ta.maxLength = 2000;
+    var row = document.createElement("div"); row.className = "row2";
+    var save = document.createElement("button"); save.type = "button"; save.className = "btn ghost"; save.textContent = "Save notes";
+    var msg = document.createElement("span"); msg.className = "saved";
+    var del = document.createElement("button"); del.type = "button"; del.className = "del"; del.textContent = "Delete session";
+    save.addEventListener("click", function () {
+      save.disabled = true; msg.textContent = "Saving…";
+      store.updateSession(s.id, { notes: ta.value.slice(0, 2000) }).then(function () { msg.textContent = "Saved."; }, function () { msg.textContent = "Couldn't save. Try again."; }).then(function () { save.disabled = false; });
+    });
+    var armed = false, timer = null;
+    del.addEventListener("click", function () {
+      if (!armed) { armed = true; del.textContent = "Confirm delete"; del.classList.add("confirm"); timer = setTimeout(function () { armed = false; del.textContent = "Delete session"; del.classList.remove("confirm"); }, 3000); return; }
+      clearTimeout(timer); del.disabled = true;
+      store.deleteSession(s.id).catch(function () { status("Couldn't delete that session. Try again."); del.disabled = false; });
+    });
+    notes.appendChild(nl); notes.appendChild(ta);
+    var left = document.createElement("div"); left.style.display = "flex"; left.style.gap = "10px"; left.style.alignItems = "center";
+    left.appendChild(save); left.appendChild(msg);
+    row.appendChild(left); row.appendChild(del); notes.appendChild(row);
+    body.appendChild(notes);
+    return body;
+  }
+
+  function renderLog() {
+    var log = $("log");
+    // don't rebuild while you're typing a note
+    if (document.activeElement && log.contains(document.activeElement) && document.activeElement.tagName === "TEXTAREA") return;
+    log.innerHTML = "";
+    var dates = {};
+    sessions.forEach(function (s) { dates[s.date] = 1; });
+    if (state.running) Object.keys(liveByDate(Date.now())).forEach(function (d) { dates[d] = 1; });
+    var sorted = Object.keys(dates).sort().reverse();
+    var list = showAll ? sorted : sorted.slice(0, 10);
+    $("logEmpty").hidden = sorted.length > 0;
+    $("showMore").hidden = sorted.length <= 10 || showAll;
+    list.forEach(function (date) {
+      var m = dayModel(date);
+      var li = document.createElement("li");
+      var det = document.createElement("details"); det.className = "sess"; det.setAttribute("data-date", date);
+      var sum = document.createElement("summary");
+      var tags = document.createElement("span"); tags.className = "tags";
+      KEYS.forEach(function (k) { if (m[k] >= 1) { var t = document.createElement("span"); t.className = "tag " + k; t.textContent = SHORT[k]; tags.appendChild(t); } });
+      if (!tags.children.length) { var t0 = document.createElement("span"); t0.className = "tag " + activeKeys()[0]; t0.textContent = "—"; tags.appendChild(t0); }
+      var when = document.createElement("span"); when.className = "when";
+      var label = new Date(date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+      if (date === localDate(Date.now())) label = "Today · " + label;
+      var n = m.timed + m.nManual;
+      label += " · " + n + (n === 1 ? " session" : " sessions");
+      if (m.first != null) label += " · " + (m.crossIn ? "00:00" : hhmm(m.first)) + "–" + (m.running && m.isToday ? "now" : m.crossOut ? "24:00" : hhmm(m.last));
+      if (m.crossIn) label += " · from previous day";
+      if (m.crossOut) label += " · continues next day";
+      when.textContent = label;
+      var dur = document.createElement("span"); dur.className = "dur"; dur.textContent = hm(m.studied);
+      var chev = document.createElement("span"); chev.className = "chev"; chev.setAttribute("aria-hidden", "true"); chev.textContent = "›";
+      sum.appendChild(tags); sum.appendChild(when); sum.appendChild(dur); sum.appendChild(chev);
+      det.appendChild(sum);
+      det.addEventListener("toggle", function () {
+        if (det.open) { openIds["d:" + date] = 1; if (!det.querySelector(".sbody")) det.appendChild(dayDetail(date)); }
+        else delete openIds["d:" + date];
+      });
+      if (openIds["d:" + date]) { det.open = true; det.appendChild(dayDetail(date)); }
+      li.appendChild(det);
+      log.appendChild(li);
+    });
+  }
+
+  function renderTargets() {
+    if (document.activeElement && document.activeElement.closest && document.activeElement.closest("#tForm")) return;
+    var act = allOrdered();
+    $("tSubj").innerHTML = act.map(function (k) {
+      return '<label class="f" for="tT-' + k + '">' + esc(SHORT[k]) + ' total (h)<input id="tT-' + k + '" data-k="' + k + '" class="tTarget" type="number" min="1" max="200" step="0.5"></label>' +
+        '<label class="f" for="tE-' + k + '">' + esc(SHORT[k]) + ' exam date<input id="tE-' + k + '" data-k="' + k + '" class="tExam" type="date"></label>';
+    }).join("");
+    act.forEach(function (k) { $("tT-" + k).value = state.targets[k]; $("tE-" + k).value = state.exams[k]; });
+    $("tDay").value = state.targets.daily;
+  }
+
+  function ago(ts) {
+    var m = Math.round((Date.now() - ts) / 60000);
+    if (m < 1) return "now"; if (m < 60) return m + "m ago";
+    var h = Math.floor(m / 60); if (h < 24) return h + "h ago";
+    return new Date(ts).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  }
+  function card(ic, icCls, app, when, inner) {
+    return '<div class="pn-card"><div class="pn-head"><span class="pn-ic ' + icCls + '">' + ic + '</span><span>' + app + '</span>' +
+      (when ? '<span class="ago">' + when + '</span>' : "") + '</div>' + inner + '</div>';
+  }
+  function esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+  function renderPanel() {
+    if ($("panel").hidden) return;
+    var now = Date.now(), d = new Date(now), x = snapshot(), r = state.running;
+    $("pnClock").textContent = pad(d.getHours()) + ":" + pad(d.getMinutes());
+    $("pnDate").textContent = d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+
+    // live session
+    var live;
+    if (r) {
+      var l = currentBreak(now) || [], cur = l[l.length - 1], since = studySinceBreak(now).ms;
+      var stateLine = isPaused()
+        ? (cur && cur.kind === "big" ? "Big break · " + shortDur(cur.ms) + " (since " + hhmm(cur.from) + ")"
+          : cur && cur.kind === "study" ? (cur.ms <= BREAK_MS ? "On a study break · " + shortDur(BREAK_MS - cur.ms) + " left · back at " + hhmm(cur.from + BREAK_MS) : "Grace minute · " + shortDur(BREAK_MS + GRACE_MS - cur.ms) + " to resume")
+          : cur && cur.over ? "Study break over · early pause " + shortDur(cur.ms) : "Early pause · " + shortDur(cur ? cur.ms : 0))
+        : (since < FOCUS_MS ? "Studying · study break in " + shortDur(FOCUS_MS - since) : "Studying · study break ready");
+      var br = breakList(now), sbN = br.filter(function (b) { return b.kind === "study"; }).length, epN = br.length - sbN;
+      var brTot = br.reduce(function (a, b) { return a + b.ms; }, 0);
+      var bgL = gapList(now).filter(function (b) { return b.kind === "big"; }), bgTot = bgL.reduce(function (a, b) { return a + b.ms; }, 0);
+      live = card(SHORT[r.subject].slice(0, 2), isPaused() ? (cur && cur.kind === "study" ? "ok" : cur && cur.kind === "big" ? "idle" : "warn") : r.subject, "Live session", "since " + hhmm(r.startedAt),
+        '<div class="pn-title">' + NAMES[r.subject] + '</div><div class="pn-big">' + clockText(elapsedMs(now)) + '</div>' +
+        '<div class="pn-body">' + stateLine + '</div>' +
+        '<div class="pn-body">' + sbN + (sbN === 1 ? " study break" : " study breaks") + " · " + epN + (epN === 1 ? " early pause" : " early pauses") + " · total break " + shortDur(brTot) + (bgL.length ? " · " + bgL.length + " big (" + shortDur(bgTot) + ")" : "") + "</div>" +
+        '<div class="pn-body">' + fullBlocks(segs(), now) + ' full 45-min ' + (fullBlocks(segs(), now) === 1 ? "block" : "blocks") + ' this session</div>' +
+        '<div class="pn-acts">' +
+          (isPaused() ? '<button type="button" class="pri" data-act="pause">Resume</button>' + (onBigBreak() ? "" : '<button type="button" data-act="big">Big break</button>')
+            : '<button type="button" class="grn" data-act="sb"' + (since < FOCUS_MS ? " disabled" : "") + '>Study break</button><button type="button" data-act="pause">Pause</button><button type="button" data-act="big">Big break</button>') +
+          '<button type="button" data-act="stop">Stop</button></div>');
+    } else {
+      live = card("▶", "idle", "Timer", "",
+        '<div class="pn-title">Not studying right now</div><div class="pn-body">Start a session to begin locking in time.</div>' +
+        '<div class="pn-acts">' + activeKeys().map(function (k) { return '<button type="button" class="pri" data-act="start" data-subj="' + k + '" style="background:var(--' + k + ');border-color:var(--' + k + ')">Start ' + SHORT[k] + '</button>'; }).join("") + '</div>');
+    }
+    $("pnLive").innerHTML = live;
+
+    // today
+    var t = x.t, cap = Math.max(t.daily * 60, x.day), plan = planFor(x.today), act = activeKeys();
+    $("pnToday").innerHTML = card("✓", "ok", "Today", "",
+      '<div class="pn-title">' + hm(x.day) + ' locked in today</div>' +
+      '<div class="pn-bar">' + act.map(function (k) { return '<span class="' + k + '" style="width:' + (x.d[k] / cap * 100) + '%"></span>'; }).join("") + '</div>' +
+      '<div class="pn-row">' + act.map(function (k) { return '<span>' + SHORT[k] + ' <b>' + hm(x.d[k]) + '</b></span>'; }).join("") + '<span>Goal <b>' + t.daily + ' h</b></span></div>' +
+      (plan ? '<div class="pn-body" style="margin-top:6px">Day ' + plan.day + ' plan: ' + planText(plan.p) + '. ' +
+        (x.day >= t.daily * 60 ? "Daily goal reached." : hm(t.daily * 60 - x.day) + " to go.") + '</div>' : ""));
+
+    // totals
+    var exHtml = act.map(function (k) {
+      var e = examStatus(k, x);
+      return '<div class="pn-row"><span>' + SHORT[k] + ' exam · ' + (e.daysTo > 0 ? e.daysTo + (e.daysTo === 1 ? " day" : " days") : e.daysTo === 0 ? "today" : "done") + '</span><b>' + e.label + '</b></div>' +
+        '<div class="pn-body" style="font-size:13px">' + e.line + '</div>';
+    }).join("");
+    $("pnTotals").innerHTML = card("Σ", act[0], "Accumulated", "",
+      '<div class="pn-title">' + hm(act.reduce(function (a, k) { return a + x.tot[k]; }, 0)) + ' studied for these exams</div>' +
+      act.map(function (k) {
+        return '<div class="pn-row"><span>' + NAMES[k] + '</span><b>' + (x.tot[k] / 60).toFixed(1) + ' / ' + t[k] + ' h</b></div>' +
+          '<div class="pn-bar"><span class="' + k + '" style="width:' + Math.min(100, x.tot[k] / (t[k] * 60) * 100) + '%"></span></div>';
+      }).join("") +
+      '<div style="margin-top:10px;border-top:1px solid rgba(255,255,255,.12);padding-top:6px">' + exHtml + '</div>' +
+      (pastKeys().length ? '<div style="margin-top:10px;border-top:1px solid rgba(255,255,255,.12);padding-top:6px"><div class="pn-body" style="font-size:13px;margin-bottom:4px">Past exams</div>' +
+        pastKeys().map(function (k) { return '<div class="pn-row"><span>' + NAMES[k] + ' · ' + new Date(state.exams[k] + "T12:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short" }) + '</span><b>' + (x.tot[k] / 60).toFixed(1) + ' / ' + t[k] + ' h</b></div>'; }).join("") + '</div>' : ""));
+
+    // last session
+    var last = sessions.filter(function (s) { return s.source === "timer"; }).sort(function (a, b) { return (b.endedAt || b.created) - (a.endedAt || a.created); })[0];
+    if (last) {
+      var shape = sessionShape(last), ins = insightsFor(last, shape).filter(function (i) { return i[0] !== "note"; })[0];
+      var ep = Math.max(0, (last.breaks || 0) - (last.studyBreaks || 0));
+      $("pnLast").innerHTML = card(SHORT[last.subject].slice(0, 2), last.subject, "Last session", ago(last.endedAt || last.created),
+        '<div class="pn-title">' + hm(last.minutes) + ' of ' + NAMES[last.subject] + '</div>' +
+        '<div class="pn-body">' + (shape.start ? hhmm(shape.start) + "–" + hhmm(shape.end) + " · " : "") + (last.studyBreaks || 0) + " study · " + ep + " early" +
+        (shape.longest != null ? " · longest focus " + hm(shape.longest) : "") + '</div>' +
+        (ins ? '<div class="pn-body" style="margin-top:6px">' + (ins[0] === "good" ? "✓ " : "Tip: ") + esc(ins[1]) + '</div>' : ""));
+    } else $("pnLast").innerHTML = "";
+
+    // feed
+    $("pnFeed").innerHTML = notifs.length ? notifs.map(function (n) {
+      return card("•", "idle", "Study Hours", ago(n.t), '<div class="pn-title" style="font-size:15px">' + esc(n.title) + '</div>' + (n.body ? '<div class="pn-body">' + esc(n.body) + '</div>' : ""));
+    }).join("") : '<div class="pn-empty">Alerts from the tracker (hour marks, milestones, breaks) collect here.</div>';
+  }
+
+  function showPanel(on) {
+    $("panel").hidden = !on;
+    document.querySelector(".wrap").hidden = on;
+    try { localStorage.setItem("study-hours-view", on ? "panel" : "full"); } catch (e) {}
+    if (on) { renderPanel(); window.scrollTo(0, 0); }
+  }
+  $("toPanel").addEventListener("click", function () { showPanel(true); });
+  $("toTracker").addEventListener("click", function () { showPanel(false); });
+  $("pnClear").addEventListener("click", function () { notifs = []; try { localStorage.setItem(NOTIF_KEY, "[]"); } catch (e) {} renderPanel(); });
+  $("panel").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-act]"); if (!b || b.disabled) return;
+    var a = b.getAttribute("data-act");
+    if (a === "start") { pick(b.getAttribute("data-subj")); $("startStop").click(); }
+    else if (a === "stop") $("startStop").click();
+    else if (a === "pause") $("pauseBtn").click();
+    else if (a === "sb") $("sbBtn").click();
+    else if (a === "big") $("bigBtn").click();
+  });
+
+  // ---------- exam countdown ----------
+  function dayDiff(a, b) { return Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / 86400000); }
+  function addDays(d, n) { var x = new Date(d + "T12:00:00"); x.setDate(x.getDate() + n); return localDate(x.getTime()); }
+  function examStatus(k, x) {
+    var today = x.today, exam = state.exams[k], daysTo = dayDiff(today, exam);
+    var target = x.t[k] * 60, done = x.tot[k], left = Math.max(0, target - done);
+    if (daysTo < 0) return { k: k, cls: "done", label: "Done", daysTo: daysTo, line: "Exam written. " + hm(done) + " studied of your " + x.t[k] + " h target (" + Math.round(done / target * 100) + "%)." };
+    if (daysTo === 0) return { k: k, cls: "done", label: "Today", daysTo: 0, line: "Exam today. Good luck! " + hm(done) + " studied." };
+    var days = daysTo;                       // study days left: today up to the day before the exam
+    var perDay = left / days;
+    var planned = 0;                         // planned hours for this subject over the same days
+    for (var i = 0; i < days; i++) { var pf = planFor(addDays(today, i)); planned += pf ? pf.p[k] * 60 : 0; }
+    var since = SUBJ[k] && SUBJ[k].added ? Math.max(1, dayDiff(SUBJ[k].added, exam)) : 0;
+    var planPer = planned > 0 ? planned / days : since ? target / since : 3.5 * 60;
+    var cls = left <= 0 ? "ok" : perDay <= planPer * 1.1 ? "ok" : perDay <= planPer * 1.3 ? "tight" : "behind";
+    var label = left <= 0 ? "Target met" : cls === "ok" ? "On track" : cls === "tight" ? "Tight" : "Behind";
+    var line = left <= 0 ? "Target reached, " + hm(done) + " studied. Keep the momentum with practice papers."
+      : hm(left) + " left over " + days + (days === 1 ? " day" : " days") + " = " + hm(perDay) + " a day" +
+        (planned > 0 ? " (plan pace " + hm(planPer) + "/day)" : "") + ".";
+    return { k: k, cls: cls, label: label, daysTo: daysTo, days: days, perDay: perDay, left: left, line: line };
+  }
+  function renderExams() {
+    var x = snapshot(), html = "";
+    var nAct = activeKeys().length;
+    allOrdered().forEach(function (k, i) {
+      if (i === nAct && i > 0) html += '<h3 class="pasth">Past exams</h3>';
+      var e = examStatus(k, x), d = new Date(state.exams[k] + "T12:00:00");
+      html += '<div class="exrow ' + e.cls + '"><span class="nm">' + NAMES[k] + '<span class="st">' + e.label + '</span></span>' +
+        '<span class="dl">' + (e.daysTo > 0 ? e.daysTo + (e.daysTo === 1 ? " day" : " days") : e.daysTo === 0 ? "today" : "done") + '</span>' +
+        '<span class="ln">' + d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) + " · " + e.line + '</span></div>';
+    });
+    $("exam").innerHTML = html;
+  }
+
+  // ---------- end-of-session recall ----------
+  var recallFor = null;
+  function showRecall(id, subj, mins) {
+    recallFor = id;
+    $("recallP").textContent = "You just did " + hm(mins) + " of " + NAMES[subj] + ". Write them from memory, without looking at your notes. It takes a minute and locks the session in.";
+    ["rc1", "rc2", "rc3"].forEach(function (i) { $(i).value = ""; });
+    $("recall").hidden = false;
+    setTimeout(function () { $("rc1").focus(); }, 50);
+  }
+  function closeRecall() { $("recall").hidden = true; recallFor = null; }
+  $("rcSkip").addEventListener("click", closeRecall);
+  $("recall").addEventListener("keydown", function (e) { if (e.key === "Escape") closeRecall(); });
+  $("rcSave").addEventListener("click", async function () {
+    var items = ["rc1", "rc2", "rc3"].map(function (i) { return $(i).value.trim(); }).filter(Boolean);
+    if (!items.length) { closeRecall(); return; }
+    var id = recallFor, existing = (sessions.filter(function (x) { return x.id === id; })[0] || {}).notes || "";
+    var text = (existing ? existing + "\n" : "") + "Recall:\n" + items.map(function (t, n) { return (n + 1) + ". " + t; }).join("\n");
+    $("rcSave").disabled = true;
+    try { await store.updateSession(id, { notes: text.slice(0, 2000) }); closeRecall(); toast("Recall saved", "Added to the session's notes. Open it under Sessions to review later."); }
+    catch (e) { toast("Couldn't save your recall", "Try again."); }
+    finally { $("rcSave").disabled = false; }
+  });
+
+  // ---------- summary copy for phone push notifications ----------
+  // A small summary kept at a shared path so a scheduled task can read it and push it to your phone.
+  var lastSummary = "", summaryTimer = null, summaryRef = null;
+  function buildSummary() {
+    var tot = minutesBy(function () { return true; }), days = {};
+    sessions.forEach(function (x) { days[x.date] = days[x.date] || zeros(); if (SUBJ[x.subject]) days[x.date][x.subject] += x.minutes; });
+    var last = sessions.filter(function (x) { return x.source === "timer"; }).sort(function (a, b) { return (b.endedAt || b.created) - (a.endedAt || a.created); })[0];
+    return {
+      v: 1,
+      note: "Logged minutes exclude any running timer; compute live time from running.segments ([start, end|null, breakKind]).",
+      timezone: "Africa/Johannesburg",
+      targets: state.targets, exams: state.exams, activeSubjects: activeKeys(), plans: PLANS,
+      loggedMinutes: (function () { var o = {}; KEYS.forEach(function (k) { o[k] = Math.round(tot[k]); }); return o; })(),
+      minutesByDate: days,
+      running: state.running ? { subject: state.running.subject, segments: state.running.segments } : null,
+      lastSession: last ? { subject: last.subject, minutes: last.minutes, endedAt: last.endedAt || last.created, studyBreaks: last.studyBreaks || 0, breaks: last.breaks || 0 } : null
+    };
+  }
+  function syncSummary() {
+    if (!summaryRef) return;
+    clearTimeout(summaryTimer);
+    summaryTimer = setTimeout(function () {
+      var body = buildSummary(), json = JSON.stringify(body);
+      if (json === lastSummary) return;
+      lastSummary = json;
+      body.updatedAt = Date.now();
+      summaryRef.set(body).catch(function () { lastSummary = ""; });
+    }, 3000);
+  }
+
+
+  // ---------- Exams and subjects tab ----------
+  function renderSubjects() {
+    var ul = $("subjList"); if (!ul) return;
+    if (document.activeElement && ul.contains(document.activeElement)) return;
+    var tot = minutesBy(function () { return true; }), today = localDate(Date.now());
+    if (state.running) tot[state.running.subject] += liveMinutes();
+    ul.innerHTML = "";
+    allOrdered().forEach(function (k) {
+      var li = document.createElement("li");
+      var sw = document.createElement("span"); sw.className = "swb " + k;
+      var nm = document.createElement("span"); nm.className = "nm"; nm.textContent = NAMES[k] + (SHORT[k] !== NAMES[k] ? " (" + SHORT[k] + ")" : "");
+      var dd = dayDiff(today, state.exams[k]);
+      var sm = document.createElement("small");
+      sm.textContent = new Date(state.exams[k] + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" }) +
+        (dd > 0 ? " · in " + dd + (dd === 1 ? " day" : " days") : dd === 0 ? " · today" : " · written") +
+        " · " + (tot[k] / 60).toFixed(1) + " / " + state.targets[k] + " h";
+      nm.appendChild(sm);
+      li.appendChild(sw); li.appendChild(nm);
+      if (SUBJ[k].custom) {
+        var del = document.createElement("button"); del.type = "button";
+        var used = tot[k] > 0 || sessions.some(function (x) { return x.subject === k; }) || (state.running && state.running.subject === k);
+        if (used) { del.textContent = "Has time logged"; del.disabled = true; del.title = "Exams with logged time can't be removed, so your history stays complete."; }
+        else {
+          del.textContent = "Remove"; var armed = false, tm = null;
+          del.addEventListener("click", function () {
+            if (!armed) { armed = true; del.textContent = "Confirm remove"; del.classList.add("confirm"); tm = setTimeout(function () { armed = false; del.textContent = "Remove"; del.classList.remove("confirm"); }, 3000); return; }
+            clearTimeout(tm); del.disabled = true; removeSubject(k);
+          });
+        }
+        li.appendChild(del);
+      } else li.appendChild(document.createElement("span"));
+      ul.appendChild(li);
+    });
+    if (!$("exDate").value) $("exDate").value = addDays(today, 14);
+  }
+  function nextColor() {
+    var used = Object.keys(state.subjects).map(function (k) { return state.subjects[k].color.toLowerCase(); });
+    return PALETTE.filter(function (c) { return used.indexOf(c) < 0; })[0] || PALETTE[Object.keys(state.subjects).length % PALETTE.length];
+  }
+  async function saveSubjects(subjects, targets, exams, msgEl, okText) {
+    var prev = { subjects: state.subjects, targets: state.targets, exams: state.exams };
+    setSubjects(subjects); state.targets = clampTargets(targets); state.exams = cleanExams(exams);
+    try {
+      await store.saveState({ running: state.running, targets: state.targets, exams: state.exams, subjects: state.subjects });
+      if (msgEl) msgEl.textContent = okText || "Saved.";
+      renderAll();
+      return true;
+    } catch (e) {
+      setSubjects(prev.subjects); state.targets = prev.targets; state.exams = prev.exams;
+      if (msgEl) msgEl.textContent = "Couldn't save. Try again.";
+      renderAll();
+      return false;
+    }
+  }
+  async function removeSubject(k) {
+    var subj = Object.assign({}, state.subjects); delete subj[k];
+    var t = Object.assign({}, state.targets); delete t[k];
+    var ex = Object.assign({}, state.exams); delete ex[k];
+    if (picked === k) picked = null;
+    await saveSubjects(subj, t, ex, $("exMsg"), "Removed.");
+  }
+  $("exColor").value = PALETTE[0];
+  $("exForm").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    if (!store) return;
+    var name = $("exName").value.trim(), short = $("exShort").value.trim(), date = $("exDate").value, target = Number($("exTarget").value);
+    if (!name) { $("exMsg").textContent = "Give the exam a name."; return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { $("exMsg").textContent = "Pick the exam date."; return; }
+    if (!(target > 0) || target > 300) { $("exMsg").textContent = "Set a target between 1 and 300 hours."; return; }
+    var lower = name.toLowerCase();
+    if (KEYS.some(function (k) { return NAMES[k].toLowerCase() === lower; })) { $("exMsg").textContent = "You already have an exam called " + name + "."; return; }
+    if (!short) {
+      var words = name.split(/\s+/).filter(Boolean);
+      short = words.length > 1 ? words.map(function (w) { return w[0]; }).join("").toUpperCase().slice(0, 5) : name.slice(0, 8);
+    }
+    var key = "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 4);
+    var subj = Object.assign({}, state.subjects); subj[key] = { name: name, short: short, color: $("exColor").value, added: localDate(Date.now()) };
+    var t = Object.assign({}, state.targets); t[key] = target;
+    var ex = Object.assign({}, state.exams); ex[key] = date;
+    $("exBtn").disabled = true;
+    var ok = await saveSubjects(subj, t, ex, $("exMsg"), "Added " + name + ": " + target + " h by " + new Date(date + "T12:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short" }) + ".");
+    $("exBtn").disabled = false;
+    if (ok) {
+      $("exName").value = ""; $("exShort").value = ""; $("exTarget").value = 30; $("exDate").value = addDays(localDate(Date.now()), 14);
+      $("exColor").value = nextColor();
+      if (!state.running && dayDiff(localDate(Date.now()), date) >= 0) { picked = key; renderTimer(); }
+    }
+  });
+
+  // ---------- Fix time tab ----------
+  // A session is a list of study intervals; the gap after each one has a kind (study / early / big).
+  function toIv(segList, now) {
+    return segList.slice().sort(function (a, b) { return a[0] - b[0]; })
+      .map(function (g) { return { s: g[0], e: g[1] == null ? now : g[1], open: g[1] == null, k: g[2] || null }; });
+  }
+  function fromIv(iv) {
+    return iv.filter(function (x) { return x.e > x.s || x.open; }).map(function (x) { var o = [x.s, x.open ? null : x.e]; if (!x.open && x.k) o.push(x.k); return o; });
+  }
+  function ivMs(iv) { return iv.reduce(function (a, x) { return a + Math.max(0, x.e - x.s); }, 0); }
+  // "I was away": remove [A, B) from the study intervals; the new gap counts as `kind`
+  function cutAway(iv, A, B, kind) {
+    var out = [];
+    iv.forEach(function (x) {
+      if (x.e <= A || x.s >= B) { out.push(x); return; }
+      if (x.s < A) out.push({ s: x.s, e: A, open: false, k: kind });
+      else if (out.length && kind === "big") out[out.length - 1].k = "big";
+      if (x.e > B) out.push({ s: B, e: x.e, open: x.open, k: x.k });
+    });
+    return out;
+  }
+  // "I was studying": add [A, B) as study; the gap after it keeps the kind of the pause it sat in
+  function addStudy(iv, A, B, open) {
+    var before = iv.filter(function (x) { return x.s <= A; }).pop();
+    var all = iv.concat([{ s: A, e: B, open: !!open, k: before ? before.k : "early" }]).sort(function (a, b) { return a.s - b.s; });
+    var res = [];
+    all.forEach(function (x) {
+      var last = res[res.length - 1];
+      if (last && x.s <= last.e) {
+        if (x.e > last.e || x.open) { last.e = Math.max(last.e, x.e); last.k = x.k; last.open = x.open || last.open; }
+      } else res.push(Object.assign({}, x));
+    });
+    return res;
+  }
+  function summarize(segList, prevEnd) {
+    var g = segList.slice().sort(function (a, b) { return a[0] - b[0]; });
+    var mins = g.reduce(function (a, x) { return a + (x[1] - x[0]); }, 0) / 60000, br = [], bigs = [];
+    for (var i = 1; i < g.length; i++) {
+      if (g[i][0] <= g[i - 1][1]) continue;
+      splitGap(g[i - 1][1], g[i][0], gapKind(g[i - 1]), g[i][0]).forEach(function (b) {
+        if (b.kind === "big") bigs.push(b); else if (b.kind !== "forgiven") br.push(b);
+      });
+    }
+    var sb = br.filter(function (b) { return b.kind === "study"; });
+    var sumM = function (l) { return Math.round(l.reduce(function (a, b) { return a + b.ms; }, 0) / 60000); };
+    var lastEnd = g[g.length - 1][1];
+    return { minutes: Math.round(mins), breaks: br.length, breakMinutes: sumM(br), breakTimes: br.map(function (b) { return [b.from, b.to, b.kind]; }),
+      studyBreaks: sb.length, studyBreakMinutes: sumM(sb), bigBreaks: bigs.length, bigBreakMinutes: sumM(bigs),
+      fullBlocks: fullBlocks(g, lastEnd), startedAt: g[0][0], endedAt: Math.max(prevEnd || 0, lastEnd) };
+  }
+  function dtLocal(ts) { var d = new Date(ts); return localDate(ts) + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes()); }
+  function parseLocal(v) { if (!v) return NaN; var t = new Date(v).getTime(); return isNaN(t) ? NaN : t; }
+  function fixTargets() {
+    var out = [];
+    if (state.running) out.push({ id: "run", label: "Running now · " + NAMES[state.running.subject] + " since " + hhmm(state.running.startedAt) });
+    sessions.filter(function (x) { return x.source === "timer" && x.segments && x.segments.length; })
+      .sort(function (a, b) { return (b.startedAt || b.created) - (a.startedAt || a.created); }).slice(0, 20)
+      .forEach(function (x) {
+        var sh = sessionShape(x);
+        out.push({ id: x.id, label: new Date(x.date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) + " · " + SHORT[x.subject] + " · " +
+          (sh.start ? hhmm(sh.start) : "?") + "–" + (sh.end ? hhmm(sh.end) : "?") + " · " + hm(x.minutes) });
+      });
+    return out;
+  }
+  var fxSel = null;
+  function fxDefaults() {
+    var id = $("fxSess").value, now = Date.now();
+    if (id === "run" && state.running) {
+      $("fxFrom").value = dtLocal(Math.max(state.running.startedAt, now - 30 * 60000)); $("fxTo").value = dtLocal(now);
+    } else {
+      var x = sessions.filter(function (q) { return q.id === id; })[0]; if (!x) return;
+      var sh = sessionShape(x), end = sh.end || now;
+      $("fxFrom").value = dtLocal(Math.max(sh.start || end, end - 30 * 60000)); $("fxTo").value = dtLocal(end);
+    }
+  }
+  function renderFix() {
+    var sel = $("fxSess"); if (!sel) return;
+    if (document.activeElement && $("fxForm").contains(document.activeElement) && document.activeElement !== sel) { fxPreview(); return; }
+    var list = fixTargets(), sig = list.map(function (o) { return o.id + o.label; }).join("|");
+    if (sel.getAttribute("data-sig") !== sig) {
+      var keep = sel.value || fxSel;
+      sel.setAttribute("data-sig", sig);
+      sel.innerHTML = list.length ? list.map(function (o) { return '<option value="' + esc(o.id) + '">' + esc(o.label) + '</option>'; }).join("") : '<option value="">No timed sessions yet</option>';
+      sel.value = list.some(function (o) { return o.id === keep; }) ? keep : (list[0] ? list[0].id : "");
+      if (sel.value !== fxSel) { fxSel = sel.value; fxDefaults(); }
+    }
+    fxPreview();
+  }
+  // works out the corrected session without saving it
+  function fxPlan() {
+    var id = $("fxSess").value, mode = (document.querySelector('input[name="fxMode"]:checked') || {}).value, now = Date.now();
+    var A = parseLocal($("fxFrom").value), B = parseLocal($("fxTo").value);
+    if (!id) return { err: "There's no timed session to fix yet." };
+    if (isNaN(A) || isNaN(B)) return { err: "Fill in both times." };
+    var running = id === "run", x = null, segList, lo, hi;
+    if (running) {
+      if (!state.running) return { err: "The timer isn't running any more. Pick a logged session." };
+      segList = state.running.segments; hi = now; lo = -Infinity;
+      if (B > now) B = now;
+    } else {
+      x = sessions.filter(function (q) { return q.id === id; })[0];
+      if (!x || !x.segments) return { err: "That session can't be found." };
+      segList = x.segments; var db = dayBounds(x.date); lo = db.start; hi = Math.min(db.end, now);
+    }
+    if (B <= A) return { err: "“Until” has to be after “From”." };
+    if (A < lo || B > hi) return { err: "Logged sessions are split by day, so keep both times on " + new Date(x.date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) + "." };
+    var iv = toIv(segList, now), before = ivMs(iv), after, res;
+    // the time inputs have minute precision: snap to a session boundary within a minute
+    iv.forEach(function (q) { [q.s, q.e].forEach(function (t) { if (Math.abs(A - t) < 60000) A = t; if (Math.abs(B - t) < 60000) B = t; }); });
+    if (B <= A) return { err: "“Until” has to be after “From”." };
+    var paused = running && iv.length && !iv[iv.length - 1].open;
+    var toNow = running && now - B < 90000;
+    if (mode === "away") {
+      res = cutAway(iv, A, B, $("fxKind").value);
+      if (running && toNow && !paused) res.push({ s: now, e: now, open: true, k: null });   // you're back now: keep the timer running
+    } else {
+      res = addStudy(iv, A, toNow && paused ? now : B, toNow && paused);
+    }
+    after = ivMs(res);
+    var diff = after - before;
+    if (Math.abs(diff) < 60000) return { err: mode === "away" ? "No study time falls in that window, so there's nothing to remove." : "That window is already counted as study, so there's nothing to add." };
+    if (after < 60000) return { err: "That would remove all the study from this session. Delete it under Sessions instead." };
+    return { running: running, x: x, segs: fromIv(res), before: before, after: after, diff: diff, resumes: mode === "study" && toNow && paused, mode: mode };
+  }
+  function fxPreview() {
+    var r = fxPlan(), el = $("fxPrev");
+    $("fxKindL").hidden = (document.querySelector('input[name="fxMode"]:checked') || {}).value !== "away";
+    $("fxBtn").disabled = !!r.err || !store;
+    el.className = "formmsg fxprev" + (r.err ? " bad" : "");
+    el.textContent = r.err ? r.err : "Study in this session: " + hm(r.before / 60000) + " → " + hm(r.after / 60000) + " (" + (r.diff > 0 ? "+" : "−") + hm(Math.abs(r.diff) / 60000) + ")" +
+      (r.resumes ? ". The timer resumes from your “From” time." : "") + ".";
+  }
+  $("fxSess").addEventListener("change", function () { fxSel = $("fxSess").value; fxDefaults(); fxPreview(); $("fxMsg").textContent = ""; });
+  ["fxFrom", "fxTo", "fxKind"].forEach(function (i) { $(i).addEventListener("input", fxPreview); $(i).addEventListener("change", fxPreview); });
+  Array.prototype.forEach.call(document.querySelectorAll('input[name="fxMode"]'), function (r) { r.addEventListener("change", fxPreview); });
+  $("fxDet").addEventListener("toggle", function () { if ($("fxDet").open) { $("fxSess").removeAttribute("data-sig"); fxSel = null; renderFix(); } });
+  $("fxForm").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    if (!store || busy) return;
+    var r = fxPlan(); if (r.err) { fxPreview(); return; }
+    $("fxBtn").disabled = true; $("fxMsg").textContent = "Saving…";
+    try {
+      if (r.running) {
+        var cur = state.running;
+        await saveRunning({ subject: cur.subject, startedAt: r.segs[0][0], segments: r.segs });
+      } else {
+        var sum = summarize(r.segs, r.x.endedAt);
+        sum.segments = r.segs;
+        await store.updateSession(r.x.id, sum);
+      }
+      $("fxMsg").textContent = "Fixed: " + (r.diff > 0 ? "added " : "removed ") + hm(Math.abs(r.diff) / 60000) + " of study.";
+      toast("Time fixed", (r.diff > 0 ? "Added " : "Removed ") + hm(Math.abs(r.diff) / 60000) + " of study. " + summaryLine(snapshot()));
+      $("fxSess").removeAttribute("data-sig"); fxSel = null;
+    } catch (err) { $("fxMsg").textContent = "Couldn't save. Try again."; }
+    finally { renderAll(); }
+  });
+
+  // ---------- study calendar ----------
+  var calMonth = null;   // "YYYY-MM"
+  function monthKey(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1); }
+  function perDate() {
+    var out = {};
+    sessions.forEach(function (x) { if (!SUBJ[x.subject]) return; out[x.date] = out[x.date] || zeros(); out[x.date][x.subject] += x.minutes; });
+    if (state.running) { var lbd = liveByDate(Date.now()), k = state.running.subject; Object.keys(lbd).forEach(function (d) { out[d] = out[d] || zeros(); out[d][k] += lbd[d]; }); }
+    return out;
+  }
+  function renderCalendar() {
+    var grid = $("calGrid"); if (!grid) return;
+    var today = localDate(Date.now()), data = perDate();
+    if (!calMonth) calMonth = today.slice(0, 7);
+    var y = Number(calMonth.slice(0, 4)), mo = Number(calMonth.slice(5, 7)) - 1;
+    var first = new Date(y, mo, 1), daysIn = new Date(y, mo + 1, 0).getDate();
+    $("calTitle").textContent = first.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+    var dates = Object.keys(data).filter(function (d) { return sumKeys(data[d]) >= 1; }).sort();
+    $("calPrev").disabled = !dates.length || dates[0].slice(0, 7) >= calMonth;
+    $("calNext").disabled = calMonth >= today.slice(0, 7);
+    if (!$("calDow").children.length) {
+      var mon = new Date(2026, 0, 5);   // a Monday
+      for (var w = 0; w < 7; w++) { var dw = document.createElement("div"); dw.textContent = new Date(mon.getFullYear(), 0, 5 + w).toLocaleDateString(undefined, { weekday: "short" }).slice(0, 2); $("calDow").appendChild(dw); }
+    }
+    var examOn = {};
+    KEYS.forEach(function (k) { examOn[state.exams[k]] = (examOn[state.exams[k]] || []).concat([NAMES[k]]); });
+    grid.innerHTML = "";
+    var lead = (first.getDay() + 6) % 7;   // weeks start on Monday
+    for (var b = 0; b < lead; b++) { var bl = document.createElement("div"); bl.className = "calcell blank"; grid.appendChild(bl); }
+    var mDays = 0, mMin = 0, best = null;
+    for (var d = 1; d <= daysIn; d++) {
+      var date = calMonth + "-" + pad(d), m = data[date] || zeros(), tot = sumKeys(m), goal = dailyFor(date) * 60;
+      var lvl = tot < 1 ? 0 : tot < goal / 4 ? 1 : tot < goal / 2 ? 2 : tot < goal ? 3 : 4;
+      var studied = tot >= 1;
+      var cell = document.createElement(studied ? "button" : "div");
+      if (studied) cell.type = "button";
+      cell.className = "calcell" + (lvl ? " l" + lvl : "") + (date === today ? " today" : "") + (date > today ? " future" : "") + (examOn[date] ? " exam" : "");
+      var dn = document.createElement("span"); dn.className = "dn"; dn.textContent = d; cell.appendChild(dn);
+      var parts = KEYS.filter(function (k) { return m[k] >= 1; });
+      var label = new Date(date + "T12:00:00").toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }) + ": " +
+        (studied ? hm(tot) + " studied (" + parts.map(function (k) { return SHORT[k] + " " + hm(m[k]); }).join(", ") + ")" : "no study logged") +
+        (examOn[date] ? ". Exam: " + examOn[date].join(", ") : "");
+      cell.title = label; cell.setAttribute("aria-label", label);
+      if (studied) {
+        var h = document.createElement("span"); h.className = "hrs"; h.textContent = (tot / 60).toFixed(1) + "h"; cell.appendChild(h);
+        var sb = document.createElement("span"); sb.className = "sb";
+        parts.forEach(function (k) { var sp = document.createElement("span"); sp.className = k; sp.style.background = "var(--" + k + ")"; sp.style.width = (m[k] / tot * 100) + "%"; sb.appendChild(sp); });
+        cell.appendChild(sb);
+        (function (dt) { cell.addEventListener("click", function () { openDay(dt); }); })(date);
+        mDays++; mMin += tot; if (!best || tot > best.m) best = { d: date, m: tot };
+      }
+      grid.appendChild(cell);
+    }
+    // streak: consecutive study days up to today (today counts once you've studied)
+    var streak = 0, cur = (data[today] && sumKeys(data[today]) >= 1) ? today : addDays(today, -1);
+    while (data[cur] && sumKeys(data[cur]) >= 1) { streak++; cur = addDays(cur, -1); }
+    var allDays = dates.length;
+    $("calSum").innerHTML = mDays
+      ? "<b>" + mDays + "</b> study " + (mDays === 1 ? "day" : "days") + " this month · <b>" + (mMin / 60).toFixed(1) + " h</b> · best day <b>" +
+        esc(new Date(best.d + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })) + "</b> (" + hm(best.m) + ")" +
+        " · current streak <b>" + streak + (streak === 1 ? " day" : " days") + "</b> · <b>" + allDays + "</b> study days in total"
+      : "No study logged this month." + (allDays ? " " + allDays + " study days in total." : "");
+  }
+  function openDay(date) {
+    var sorted = Object.keys(perDate()).sort().reverse();
+    if (sorted.indexOf(date) >= 10) showAll = true;
+    openIds["d:" + date] = 1;
+    renderLog();
+    var el = document.querySelector('#log details.sess[data-date="' + date + '"]');
+    if (el) { el.open = true; el.scrollIntoView({ behavior: "smooth", block: "start" }); var sm = el.querySelector("summary"); if (sm) sm.focus({ preventScroll: true }); }
+  }
+  $("calPrev").addEventListener("click", function () { var y = Number(calMonth.slice(0, 4)), m = Number(calMonth.slice(5, 7)) - 1; calMonth = monthKey(new Date(y, m - 1, 1)); renderCalendar(); });
+  $("calNext").addEventListener("click", function () { var y = Number(calMonth.slice(0, 4)), m = Number(calMonth.slice(5, 7)) - 1; calMonth = monthKey(new Date(y, m + 1, 1)); renderCalendar(); });
+
+  function renderAll() { renderTimer(); renderStats(); renderExams(); renderWeek(); renderLog(); renderTargets(); renderSubjects(); renderFix(); renderCalendar(); renderPanel(); syncSummary(); }
+
+  // ---------- actions ----------
+  function pick(s) { if (state.running) return; picked = s; $("aSubject").value = s; renderTimer(); }
+  $("pick").addEventListener("click", function (e) { var b = e.target.closest("button[data-subj]"); if (b && !b.disabled) pick(b.getAttribute("data-subj")); });
+
+  async function saveRunning(run) { await store.saveState({ running: run, targets: state.targets }); state.running = run; }
+
+  var stopConfirmed = false;
+  function askStop() {
+    var mins = elapsedMs(Date.now()) / 60000, r = state.running;
+    $("stopP").textContent = "You've studied " + hm(mins) + " of " + NAMES[r.subject] + " in this session" + (isPaused() ? " and you're currently on a break." : ".");
+    $("stopAsk").hidden = false;
+    setTimeout(function () { $("stopNo").focus(); }, 30);
+  }
+  // Two-step confirmation: the first press arms the button, the second (within 8 s) actually stops.
+  var stopArmed = false, stopArmTimer = null;
+  function resetStopAsk() {
+    stopArmed = false; clearTimeout(stopArmTimer);
+    $("stopYes").textContent = "Stop and log it";
+    $("stopT").textContent = "Stop this session?";
+  }
+  function closeStopAsk() { $("stopAsk").hidden = true; resetStopAsk(); }
+  $("stopNo").addEventListener("click", closeStopAsk);
+  $("stopAsk").addEventListener("keydown", function (e) { if (e.key === "Escape") closeStopAsk(); });
+  $("stopAsk").addEventListener("click", function (e) { if (e.target === $("stopAsk")) closeStopAsk(); });
+  $("stopYes").addEventListener("click", function () {
+    if (!stopArmed) {
+      stopArmed = true;
+      $("stopT").textContent = "Are you sure? This ends the session.";
+      $("stopYes").textContent = "Yes, I'm sure: stop now";
+      stopArmTimer = setTimeout(resetStopAsk, 8000);
+      return;
+    }
+    closeStopAsk();
+    stopConfirmed = true; $("startStop").click(); stopConfirmed = false;
+  });
+
+  $("startStop").addEventListener("click", async function () {
+    if (!store || busy) return;
+    if (state.running && !stopConfirmed) { askStop(); return; }
+    busy = true; renderTimer();
+    try {
+      if (!state.running) {
+        var now0 = Date.now();
+        await saveRunning({ subject: picked, startedAt: now0, segments: [[now0, null]] });
+        hourMark = 0;
+        unlockAudio();
+      } else {
+        var r = state.running, end = Date.now();
+        var byDate = liveByDate(end), totalMin = elapsedMs(end) / 60000;
+        if (totalMin >= 1) {
+          var lastId = null;
+          var brk = {};
+          var bigd = {};
+          gapList(end).forEach(function (b) {
+            if (b.kind !== "big" || b.open) return;
+            var k = localDate(b.from); bigd[k] = bigd[k] || { n: 0, m: 0 }; bigd[k].n++; bigd[k].m += b.ms / 60000;
+          });
+          breakList(end).forEach(function (b) {
+            if (b.open) return; // a pause that was never resumed isn't a break
+            var k = localDate(b.from); brk[k] = brk[k] || { n: 0, m: 0, list: [], sn: 0, sm: 0 };
+            brk[k].n++; brk[k].m += b.ms / 60000; brk[k].list.push([b.from, b.to, b.kind]);
+            if (b.kind === "study") { brk[k].sn++; brk[k].sm += b.ms / 60000; }
+          });
+          var dates = Object.keys(byDate).sort();
+          for (var k = 0; k < dates.length; k++) {
+            var part = Math.round(byDate[dates[k]]), bk = brk[dates[k]];
+            var dk = new Date(dates[k] + "T00:00:00"), nextMid = new Date(dk.getFullYear(), dk.getMonth(), dk.getDate() + 1).getTime();
+            var dayStart = dk.getTime();
+            var clip = r.segments.map(function (x) { var c = [Math.max(x[0], dayStart), Math.min(x[1] == null ? end : x[1], nextMid)]; if (x[2]) c.push(x[2]); return c; })
+              .filter(function (x) { return x[1] - x[0] > 0 || (x[2] === "big" && x[1] >= x[0]); });
+            if (part >= 1) lastId = await store.addSession({ subject: r.subject, minutes: part, date: dates[k], source: "timer", startedAt: firstStartOn(dates[k]), created: end, endedAt: Math.min(end, nextMid),
+              segments: clip, notes: "",
+              breaks: bk ? bk.n : 0, breakMinutes: bk ? Math.round(bk.m) : 0, breakTimes: bk ? bk.list : [],
+              studyBreaks: bk ? bk.sn : 0, studyBreakMinutes: bk ? Math.round(bk.sm) : 0,
+              bigBreaks: bigd[dates[k]] ? bigd[dates[k]].n : 0, bigBreakMinutes: bigd[dates[k]] ? Math.round(bigd[dates[k]].m) : 0,
+              fullBlocks: fullBlocks(clip, end) });
+          }
+          var subj = r.subject;
+          await saveRunning(null);
+          setTimeout(function () { notifyStop(subj, totalMin); }, 400);
+          if (totalMin >= 5 && lastId) showRecall(lastId, subj, totalMin);
+        } else {
+          await saveRunning(null);
+          toast("Nothing logged", "That session was under a minute.");
+        }
+      }
+    } catch (e) {
+      status("Couldn't save. Check your connection and try again.");
+    } finally { busy = false; renderAll(); }
+  });
+
+  async function setPause(kind) {   // kind: "study" | "early" | null (resume)
+    if (!store || busy || !state.running) return;
+    var now = Date.now();
+    if (kind === "study" && studySinceBreak(now).ms < FOCUS_MS) {
+      toast("Study break not available yet", "You get one 15-minute study break per hour, after 45 minutes of studying. " + shortDur(FOCUS_MS - studySinceBreak(now).ms) + " to go.");
+      return;
+    }
+    busy = true; renderTimer();
+    var r = state.running, g = r.segments.map(function (x) { return x.slice(); }), last = g[g.length - 1];
+    var resuming = kind == null && isPaused(), parts = resuming ? (currentBreak(now) || []) : [];
+    if (resuming) g.push([now, null]);
+    else if (kind === "big" && isPaused()) g.push([now, now, "big"]);   // switch the current pause to a big break from now
+    else { last[1] = now; last[2] = kind === "study" ? "study" : kind === "big" ? "big" : "early"; }
+    try {
+      await saveRunning({ subject: r.subject, startedAt: r.startedAt, segments: g });
+      hideNudge();
+      if (resuming) {
+        var sp = parts.filter(function (b) { return b.kind === "study"; })[0], ep = parts.filter(function (b) { return b.kind === "early"; })[0], bg = parts.filter(function (b) { return b.kind === "big"; })[0];
+        if (bg) toast("Welcome back after a " + shortDur(bg.ms) + " big break", "Logged separately, not counted as study or break time. Your next study break unlocks after 45 minutes of studying.");
+        else if (sp && ep) toast("Back after a 16:00 study break + " + shortDur(ep.ms) + " early pause", "The study break includes your 1-minute grace; time after that counts as an early pause.");
+        else if (sp) toast("Back from a " + shortDur(sp.ms) + " study break", (sp.grace ? "You used the grace minute, which is fine. " : "On time. ") + "Your next study break unlocks after 45 minutes of studying.");
+        else if (ep && ep.ms < FORGIVE_MS) toast("Back in " + shortDur(ep.ms) + ", forgiven", "Pauses under 1 minute don't count as early pauses or break your focus block.");
+        else toast("Back after a " + shortDur(ep ? ep.ms : 0) + " early pause", "Pauses outside your study break count as early pauses.");
+      } else if (kind === "study") {
+        toast("Study break started: 15 minutes", "Step away from the screen: stretch, water, fresh air. Be back at " + hhmm(now + BREAK_MS) + " (1-minute grace until " + hhmm(now + BREAK_MS + GRACE_MS) + ").");
+      } else if (kind === "big") {
+        toast("Big break started", "It's timed separately and won't count as study or break time. Press Resume when you're back.");
+      }
+    }
+    catch (e) { status("Couldn't save. Check your connection and try again."); }
+    finally { busy = false; renderAll(); }
+  }
+  $("pauseBtn").addEventListener("click", function () { setPause(isPaused() ? null : "early"); });
+  $("bigBtn").addEventListener("click", function () { setPause("big"); });
+  $("sbBtn").addEventListener("click", function () { setPause("study"); });
+
+  // ---------- 45-minute / 1-hour break prompts ----------
+  var NKEY = "study-hours-nudged";
+  var nudged = {};
+  try { nudged = JSON.parse(localStorage.getItem(NKEY) || "{}") || {}; } catch (e) { nudged = {}; }
+  var nudgeKey = null, breakOverShown = {};
+  function saveNudged() { try { var keys = Object.keys(nudged); if (keys.length > 60) keys.slice(0, keys.length - 60).forEach(function (k) { delete nudged[k]; }); localStorage.setItem(NKEY, JSON.stringify(nudged)); } catch (e) {} }
+  function hideNudge() { $("nudge").hidden = true; nudgeKey = null; }
+  function showNudge(mark, focusMs) {
+    $("nudgeT").textContent = (mark === 45 ? "45 minutes" : "1 hour") + " of studying. Your study break is ready.";
+    $("nudgeP").textContent = mark === 45
+      ? "Take your 15-minute study break now and you'll be back fresh for the next block. You get one per hour."
+      : "You've studied a full hour without your break. Take the 15 minutes now; it helps the next hour stick.";
+    $("nudge").hidden = false;
+    toast((mark === 45 ? "45 minutes" : "1 hour") + " of studying", "Your 15-minute study break is ready. Answer in the timer card.", true);
+  }
+  function checkNudge() {
+    if (!state.running || isPaused()) { if (!$("nudge").hidden) hideNudge(); return; }
+    var ss = studySinceBreak(Date.now()), focus = ss.ms, base = ss.anchor || segs()[0][0];
+    [60, 45].some(function (mark) {
+      var key = base + ":" + mark;
+      if (focus >= mark * 60000 && !nudged[key]) {
+        if (nudgeKey === key) return true;
+        if (mark === 60) nudged[base + ":45"] = 1;
+        nudgeKey = key; nudged[key] = 1; saveNudged();
+        showNudge(mark, focus);
+        return true;
+      }
+      return false;
+    });
+  }
+  function checkBreakOver() {
+    if (!state.running || !isPaused()) return;
+    var l = currentBreak(Date.now()) || [], over = l.filter(function (b) { return b.over; })[0];
+    var sp = l.filter(function (b) { return b.kind === "study"; })[0];
+    if (sp && !over && sp.ms >= BREAK_MS && !breakOverShown[sp.from + ":g"]) {
+      breakOverShown[sp.from + ":g"] = 1;
+      toast("Study break time's up", "You have a 1-minute grace to press Resume before it counts as an early pause.", true);
+    }
+    if (over && !breakOverShown[sp ? sp.from : over.from]) {
+      breakOverShown[sp ? sp.from : over.from] = 1;
+      toast("Study break over", "Press Resume. From now on this counts as an early pause.", true);
+    }
+  }
+  $("nudgeTake").addEventListener("click", function () { setPause("study"); });
+  $("nudgeSkip").addEventListener("click", function () { hideNudge(); });
+
+  $("addForm").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    if (!store) return;
+    var h = parseInt($("aHours").value || "0", 10), m = parseInt($("aMins").value || "0", 10);
+    var mins = (isNaN(h) ? 0 : h) * 60 + (isNaN(m) ? 0 : m);
+    var date = $("aDate").value || localDate(Date.now());
+    if (mins <= 0) { $("aMsg").textContent = "Enter some hours or minutes first."; return; }
+    if (mins > 16 * 60) { $("aMsg").textContent = "That's more than 16 hours. Check the numbers."; return; }
+    $("aBtn").disabled = true;
+    try {
+      await store.addSession({ subject: $("aSubject").value, minutes: mins, date: date, source: "manual", created: Date.now() });
+      $("aMsg").textContent = "Added " + hm(mins) + " of " + SHORT[$("aSubject").value] + ".";
+      $("aHours").value = 1; $("aMins").value = 0;
+    } catch (err) { $("aMsg").textContent = "Couldn't save. Try again."; }
+    finally { $("aBtn").disabled = false; }
+  });
+
+  $("tForm").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    if (!store) return;
+    var tIn = Object.assign({}, state.targets, { daily: $("tDay").value }), exIn = Object.assign({}, state.exams);
+    Array.prototype.forEach.call(document.querySelectorAll("#tForm .tTarget"), function (el) { tIn[el.getAttribute("data-k")] = el.value; });
+    Array.prototype.forEach.call(document.querySelectorAll("#tForm .tExam"), function (el) { exIn[el.getAttribute("data-k")] = el.value; });
+    var t = clampTargets(tIn);
+    var ex = cleanExams(exIn);
+    var prevLog = state.dailyLog;
+    if (t.daily !== state.targets.daily) {
+      var today = localDate(Date.now()), log = (state.dailyLog || []).filter(function (x) { return x[0] !== today; });
+      if (!log.length) log.push(["0000-01-01", state.targets.daily]);
+      log.push([today, t.daily]);
+      state.dailyLog = cleanDailyLog(log);
+    }
+    try { state.exams = ex; await store.saveState({ running: state.running, targets: t, exams: ex }); state.targets = t;
+      $("tMsg").textContent = "Saved. The daily goal applies from today; earlier days keep the goal they had."; renderAll(); }
+    catch (err) { state.dailyLog = prevLog; $("tMsg").textContent = "Couldn't save. Try again."; }
+  });
+
+
+  try { if (localStorage.getItem("study-hours-breaks-open") === "0") $("brDet").open = false; } catch (e) {}
+  $("brDet").addEventListener("toggle", function () { try { localStorage.setItem("study-hours-breaks-open", $("brDet").open ? "1" : "0"); } catch (e) {} });
+
+  async function clearBreakHistory() {
+    var now = Date.now(), jobs = [];
+    sessions.forEach(function (x) {
+      if (x.breaks || x.breakMinutes || x.studyBreaks || (x.breakTimes && x.breakTimes.length) || (x.segments && x.segments.length > 1)) {
+        // keep study time; merge study segments into one block so no breaks remain
+        var seg = x.segments && x.segments.length ? [[x.segments[0][0], x.segments[0][0] + x.minutes * 60000]] : null;
+        var upd = { breaks: 0, breakMinutes: 0, breakTimes: [], studyBreaks: 0, studyBreakMinutes: 0 };
+        if (seg) { upd.segments = seg; upd.endedAt = seg[0][1]; }
+        jobs.push(store.updateSession(x.id, upd));
+      }
+    });
+    if (state.running && state.running.segments.length > 1) {
+      var el = elapsedMs(now), paused = isPaused(), st0 = now - el;
+      state.running = { subject: state.running.subject, startedAt: st0, segments: [[st0, paused ? now : null]] };
+    }
+    state.breaksClearedAt = now;
+    state.breaksReset1 = true;
+    jobs.push(store.saveState({ running: state.running, targets: state.targets }));
+    await Promise.all(jobs);
+    renderAll();
+  }
+  var migrating = false;
+  function migrateOnce() {
+    if (state.breaksReset1 || migrating || !store) return;
+    migrating = true;
+    clearBreakHistory().then(function () { toast("Break history cleared", "Your study time is kept. Breaks are tracked fresh from now."); }, function () { migrating = false; });
+  }
+  (function () {
+    var b = $("clearBreaks"), armed = false, t = null;
+    b.addEventListener("click", function () {
+      if (!store) return;
+      if (!armed) { armed = true; b.textContent = "Confirm: clear breaks"; t = setTimeout(function () { armed = false; b.textContent = "Clear break history"; }, 3000); return; }
+      clearTimeout(t); armed = false; b.disabled = true;
+      clearBreakHistory().then(function () { $("cbMsg").textContent = "Cleared. Study time kept."; }, function () { $("cbMsg").textContent = "Couldn't clear. Try again."; })
+        .then(function () { b.disabled = false; b.textContent = "Clear break history"; });
+    });
+  })();
+
+  $("showMore").addEventListener("click", function () { showAll = true; renderLog(); });
+
+  // ---------- progress notifications ----------
+  var hourMark = null;          // full hours of the running session already announced
+  var reached = null;           // milestone keys already reached (null until data has loaded)
+  var PREF = "study-hours-chime";
+  try { $("chime").checked = localStorage.getItem(PREF) === "1"; } catch (e) {}
+  $("chime").addEventListener("change", function () { try { localStorage.setItem(PREF, $("chime").checked ? "1" : "0"); } catch (e) {} if ($("chime").checked) { unlockAudio(); chime(); } });
+
+  var actx = null;
+  function unlockAudio() { try { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === "suspended") actx.resume(); } catch (e) {} }
+  function chime() {
+    if (!$("chime").checked || !actx) return;
+    try {
+      [660, 880].forEach(function (f, i) {
+        var o = actx.createOscillator(), g = actx.createGain(), t0 = actx.currentTime + i * 0.18;
+        o.frequency.value = f; o.type = "sine"; g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.18, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.5);
+        o.connect(g).connect(actx.destination); o.start(t0); o.stop(t0 + 0.55);
+      });
+    } catch (e) {}
+  }
+
+  var NOTIF_KEY = "study-hours-notifs", notifs = [];
+  try { notifs = JSON.parse(localStorage.getItem(NOTIF_KEY) || "[]") || []; } catch (e) { notifs = []; }
+  function logNotif(title, body) {
+    notifs.unshift({ t: Date.now(), title: title, body: body || "" });
+    notifs = notifs.slice(0, 25);
+    try { localStorage.setItem(NOTIF_KEY, JSON.stringify(notifs)); } catch (e) {}
+    if (!$("panel").hidden) renderPanel();
+  }
+
+  function toast(title, body, sound) {
+    logNotif(title, body);
+    var box = document.createElement("div"); box.className = "toast"; box.setAttribute("role", "status");
+    var txt = document.createElement("div");
+    var st = document.createElement("strong"); st.textContent = title; txt.appendChild(st);
+    if (body) txt.appendChild(document.createTextNode(body));
+    var x = document.createElement("button"); x.type = "button"; x.textContent = "Close"; x.addEventListener("click", function () { box.remove(); });
+    box.appendChild(txt); box.appendChild(x);
+    var host = $("toasts"); host.appendChild(box);
+    while (host.children.length > 3) host.firstChild.remove();
+    setTimeout(function () { box.remove(); }, 9000);
+    if (sound) chime();
+  }
+
+  function snapshot() {
+    var t = state.targets, today = localDate(Date.now()), subj = state.running && state.running.subject;
+    var d = minutesBy(function (s) { return s.date === today; });
+    var tot = minutesBy(function () { return true; });
+    if (subj) { d[subj] += (liveByDate(Date.now())[today] || 0); tot[subj] += liveMinutes(); }
+    return { t: t, today: today, day: sumKeys(d), d: d, tot: tot };
+  }
+  function summaryLine(x) {
+    return "Today " + hm(x.day) + " of " + x.t.daily + " h · " + activeKeys().map(function (k) { return SHORT[k] + " " + hm(x.tot[k]) + " of " + x.t[k] + " h"; }).join(" · ") + ".";
+  }
+
+  function milestoneKeys(x) {
+    var keys = [];
+    if (x.day >= x.t.daily * 60) keys.push("day:" + x.today);
+    if (x.day >= x.t.daily * 30) keys.push("half:" + x.today);
+    activeKeys().forEach(function (k) {
+      [25, 50, 75, 100].forEach(function (p) { if (x.tot[k] >= x.t[k] * 60 * p / 100) keys.push(k + ":" + x.t[k] + ":" + p); });
+    });
+    return keys;
+  }
+  function checkMilestones() {
+    if (reached == null) return;
+    var x = snapshot();
+    milestoneKeys(x).forEach(function (key) {
+      if (reached[key]) return;
+      reached[key] = 1;
+      var parts = key.split(":");
+      if (parts[0] === "day") toast("Daily target reached", "You've locked in " + hm(x.day) + " today. " + summaryLine(x), true);
+      else if (parts[0] === "half") toast("Halfway through today", hm(x.day) + " locked in today, " + hm(x.t.daily * 60 - x.day) + " to go.", true);
+      else toast(NAMES[parts[0]] + " " + parts[2] + "% done",
+        hm(x.tot[parts[0]]) + " locked in of your " + x.t[parts[0]] + " h target.", true);
+    });
+  }
+  function initMilestones() {
+    if (reached != null) return;
+    reached = {};
+    milestoneKeys(snapshot()).forEach(function (k) { reached[k] = 1; });
+  }
+
+  function checkHour() {
+    if (!state.running || isPaused()) return;
+    var h = Math.floor(elapsedMs(Date.now()) / 3600000);
+    if (hourMark == null) { hourMark = h; return; }
+    if (h > hourMark) {
+      hourMark = h;
+      var x = snapshot();
+      toast(h + (h === 1 ? " hour" : " hours") + " locked in this session", SHORT[state.running.subject] + ". " + summaryLine(x), true);
+    }
+  }
+
+  function notifyStop(subj, mins) {
+    var x = snapshot();
+    toast("Locked in " + hm(mins) + " of " + SHORT[subj], summaryLine(x), false);
+  }
+
+  $("progressBtn").addEventListener("click", function () {
+    var x = snapshot();
+    var left = Math.max(0, x.t.daily * 60 - x.day);
+    toast("You've locked in " + hm(activeKeys().reduce(function (a, k) { return a + x.tot[k]; }, 0)) + " for these exams",
+      summaryLine(x) + (left ? " " + hm(left) + " left for today's target." : " Today's target is done."), false);
+  });
+
+  // tick the clock and live totals once a second (no writes)
+  var blockSeen = null;
+  function checkBlocks() {
+    if (!state.running) { blockSeen = null; return; }
+    var n = fullBlocks(segs(), Date.now());
+    if (blockSeen == null) { blockSeen = n; return; }   // don't celebrate old blocks after a reload
+    if (n > blockSeen) {
+      blockSeen = n;
+      toast("Full 45-minute block completed", "45 minutes without a single break. That's " + n + (n === 1 ? " full block" : " full blocks") + " this session.", true);
+    }
+  }
+  setInterval(function () { if (state.running) { renderTimer(); renderStats(); checkHour(); checkMilestones(); checkNudge(); checkBreakOver(); checkBlocks(); } renderPanel(); }, 1000); // renderTimer also refreshes the break clock
+  setInterval(function () { if (state.running) { renderWeek(); renderCalendar(); } else renderStats(); }, 30000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) renderAll(); });
+
+  $("aDate").value = localDate(Date.now());
+  (function () { var v = null; try { v = localStorage.getItem("study-hours-view"); } catch (e) {}
+    if (location.hash === "#panel" || v === "panel") showPanel(true); })();
+  renderAll();
+
+  // ---------- storage: account db, with a browser-only fallback ----------
+  function localAdapter() {
+    var KEY = "study-hours-v1";
+    var mem = { state: state, sessions: [] };
+    try { var raw = localStorage.getItem(KEY); if (raw) mem = JSON.parse(raw); } catch (e) {}
+    setSubjects(mem.state && mem.state.subjects);
+    state.running = normRunning(mem.state && mem.state.running);
+    state.targets = clampTargets(mem.state && mem.state.targets);
+    state.breaksClearedAt = Number(mem.state && mem.state.breaksClearedAt) || 0;
+    state.breaksReset1 = !!(mem.state && mem.state.breaksReset1);
+    state.exams = cleanExams(mem.state && mem.state.exams);
+    state.dailyLog = cleanDailyLog(mem.state && mem.state.dailyLog);
+    sessions = (mem.sessions || []).slice();
+    function save() { try { localStorage.setItem(KEY, JSON.stringify({ state: state, sessions: sessions })); } catch (e) {} }
+    return {
+      saveState: function (s) { state.running = s.running; state.targets = s.targets; if (s.exams) state.exams = s.exams; if (s.subjects) state.subjects = s.subjects; save(); renderAll(); return Promise.resolve(); },
+      updateSession: function (id, data) { sessions = sessions.map(function (x) { return x.id === id ? Object.assign({}, x, data) : x; }); save(); renderAll(); return Promise.resolve(); },
+      addSession: function (s) { s.id = "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); sessions.push(s); save(); renderAll(); checkMilestones(); return Promise.resolve(s.id); },
+      deleteSession: function (id) { sessions = sessions.filter(function (x) { return x.id !== id; }); save(); renderAll(); return Promise.resolve(); }
+    };
+  }
+
+  function useLocal(msg) {
+    store = localAdapter();
+    status(msg);
+    initMilestones();
+    migrateOnce();
+    renderAll();
+  }
+
+  async function connect() {
+    if (!window.claude || typeof window.claude.use !== "function") {
+      return useLocal("Saving in this browser only. Open this page in Claude while signed in to save to your account.");
+    }
+    var db, user;
+    try {
+      var r = await Promise.all([window.claude.use("db"), window.claude.use("user")]);
+      db = r[0]; user = r[1];
+    } catch (e) { db = null; }
+    var uid = user ? await user.id() : null;
+    if (!db || !uid) return useLocal("Saving in this browser only. Sign in to Claude to save to your account.");
+
+    var stateRef = db.doc("data/users/" + uid + "/tracker");
+    summaryRef = db.doc("summary/latest");
+    var sessCol = stateRef.collection("sessions");
+    var gotState = false, gotSessions = false;
+
+    store = {
+      saveState: function (s) { return stateRef.set({ running: s.running || null, targets: s.targets, breaksClearedAt: state.breaksClearedAt || 0, breaksReset1: !!state.breaksReset1, exams: s.exams || state.exams, dailyLog: state.dailyLog || [], subjects: s.subjects || state.subjects || {} }); },
+      updateSession: function (id, data) { return sessCol.doc(id).update(data); },
+      addSession: function (s) { return sessCol.add(s).then(function (ref) { return ref && ref.id; }); },
+      deleteSession: function (id) { return sessCol.doc(id).delete(); }
+    };
+
+    stateRef.onSnapshot(function (snap) {
+      var d = snap.exists ? snap.data() : null;
+      setSubjects(d && d.subjects);
+      state.running = normRunning(d && d.running);
+      state.targets = clampTargets(d && d.targets);
+      state.breaksClearedAt = Number(d && d.breaksClearedAt) || 0;
+      state.breaksReset1 = !!(d && d.breaksReset1);
+      state.exams = cleanExams(d && d.exams);
+      state.dailyLog = cleanDailyLog(d && d.dailyLog);
+      if (state.running) picked = state.running.subject;
+      gotState = true; if (gotSessions) { initMilestones(); migrateOnce(); } renderAll();
+    }, function () { status("Lost connection to your saved data. Reload the page."); });
+
+    sessCol.onSnapshot(function (snap) {
+      sessions = snap.docs.map(function (doc) {
+        var d = doc.data() || {};
+        return { id: doc.id, subject: typeof d.subject === "string" && /^[a-z][a-z0-9]{1,15}$/.test(d.subject) ? d.subject : "fp", minutes: Number(d.minutes) || 0, date: String(d.date || ""), source: d.source, startedAt: d.startedAt ? Number(d.startedAt) : null, created: Number(d.created) || 0,
+          endedAt: d.endedAt ? Number(d.endedAt) : null,
+          breaks: Number(d.breaks) || 0, breakMinutes: Number(d.breakMinutes) || 0,
+          breakTimes: Array.isArray(d.breakTimes) ? d.breakTimes.map(function (b) { return [Number(b[0]), Number(b[1]), b[2] ? String(b[2]) : null]; }) : [],
+          studyBreaks: Number(d.studyBreaks) || 0, studyBreakMinutes: Number(d.studyBreakMinutes) || 0,
+          bigBreaks: Number(d.bigBreaks) || 0, bigBreakMinutes: Number(d.bigBreakMinutes) || 0,
+          fullBlocks: d.fullBlocks != null ? Number(d.fullBlocks) || 0 : (Array.isArray(d.segments) ? fullBlocks(d.segments.map(function (b) { return [Number(b[0]), Number(b[1])]; }), 0) : 0),
+          segments: Array.isArray(d.segments) ? d.segments.map(function (b) { var o = [Number(b[0]), Number(b[1])]; if (b[2]) o.push(String(b[2])); return o; }) : null,
+          notes: typeof d.notes === "string" ? d.notes : "" };
+      });
+      gotSessions = true; if (gotState) { initMilestones(); migrateOnce(); } checkMilestones(); renderAll();
+    }, function () { status("Lost connection to your saved data. Reload the page."); });
+
+    renderAll();
+  }
+  connect();
+})();
+</script>
